@@ -8,7 +8,7 @@
         <version>4.1.1</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.E-commerce</groupId>
+    <groupId>com.ecommerce</groupId>
     <artifactId>ai-commerce-support</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>ai-commerce-support</name>
