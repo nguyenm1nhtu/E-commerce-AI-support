@@ -61,8 +61,9 @@ Nếu từng chạy `compose.yaml` cũ, volume mang tiền tố `ai-commerce-sup
 vẫn được giữ lại nhưng không tự gắn vào project dev/prod mới. Cần backup/restore
 nếu muốn chuyển dữ liệu cũ; thay đổi này không xóa container hay volume hiện có.
 Đổi mật khẩu PostgreSQL trong env không tự đổi mật khẩu trong database đã khởi tạo.
-Image pgvector cung cấp extension; mỗi database cần `CREATE EXTENSION IF NOT EXISTS vector;`
-(ví dụ qua Flyway) trước khi lưu vector.
+Image pgvector cung cấp extension; Liquibase bật `vector` qua changeset đầu tiên
+khi backend khởi động. Database production cần hỗ trợ pgvector và tài khoản chạy
+migration cần quyền tạo extension.
 
 Cách dùng `--env-file` và kiểm tra biến bắt buộc theo
 [tài liệu Docker Compose](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/).

@@ -14,11 +14,19 @@ Maven Wrapper (`mvnw` or `mvnw.cmd`) for reproducible commands.
 - `./mvnw clean verify` (Linux/macOS) or `./mvnw.cmd clean verify` (Windows):
   compile the project and run the full verification lifecycle.
 - `./mvnw test` or `./mvnw.cmd test`: run the JUnit test suite.
-- `./mvnw spring-boot:run` or `./mvnw.cmd spring-boot:run`: start the local
-  Spring Boot application.
+- `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev` (Linux/macOS) or
+  `.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"` (Windows):
+  start the application with the dev profile after providing the required
+  database environment variables. See `docs/terminal-commands.md`.
 
 The project targets Java 25. Keep a compatible JDK configured before invoking
 the wrapper. Do not commit generated `target/` output.
+
+Liquibase owns schema changes. Add immutable changesets under
+`src/main/resources/db/changelog/changes/` and include them from
+`src/main/resources/db/changelog/db.changelog-master.yaml`. Hibernate runs with
+`ddl-auto: validate`; entity changes require matching migrations. Tests use the
+`test` profile and H2.
 
 ## Coding Style & Naming Conventions
 
@@ -47,5 +55,5 @@ only when a change affects a user-facing interface.
 ## Security & Configuration Tips
 
 Keep credentials, tokens, and environment-specific secrets out of Git.
-Review `src/main/resources/application.properties` and use environment
-configuration for local or deployment-specific values.
+Review `src/main/resources/application.yml` and its dev/prod profile files;
+use environment configuration for local or deployment-specific values.

@@ -282,7 +282,7 @@ Không tự động hóa ở giai đoạn đầu:
 | API/nghiệp vụ | Spring Boot, Spring Web | Controller, service, DTO, validation |
 | Security | Spring Security + JWT | Authentication, RBAC, ownership |
 | Persistence | Spring Data JPA + PostgreSQL | Orders, tickets, returns, audit |
-| Schema evolution | Flyway hoặc Liquibase | Migration có version control |
+| Schema evolution | Liquibase + Hibernate `validate` | Liquibase quản lý migration có version control; Hibernate kiểm tra schema khớp với entity |
 | Caching | Redis | Hot reads, hỗ trợ rate limit, conversation state tùy chọn |
 | RAG storage | pgvector | Lưu/truy vấn vector embedding trong PostgreSQL |
 | AI framework | Spring AI | ChatClient, VectorStore, RAG, tool calling, model abstractions |
@@ -460,8 +460,6 @@ Không cần làm điều kiện tiên quyết: toán transformer, model trainin
 
 ## 18. Definition of Done và demo
 
-### 18.1. Definition of Done
-
 - [ ] Clone repository và chạy local được bằng lệnh trong tài liệu.
 - [ ] Database migrations tạo schema một cách xác định.
 - [ ] Core APIs được bảo vệ và có integration tests.
@@ -474,16 +472,6 @@ Không cần làm điều kiện tiên quyết: toán transformer, model trainin
 - [ ] README chứa kiến trúc, demo flow, trade-offs và trạng thái dự án.
 
 Checklist trên là tiêu chí thiết kế; chưa xác nhận mục nào đã hoàn thành.
-
-### 18.2. Demo phỏng vấn 5 phút
-
-1. Đăng nhập customer, mở `ORD-101`.
-2. Hỏi: “My order arrived 10 days ago. Can I return the headphones?”
-3. Hiển thị agent trace: order tool + shipment tool + RAG source.
-4. Xác nhận trả hàng; hiển thị `ReturnRequest` đã lưu và audit records.
-5. Hỏi câu không được hỗ trợ/mơ hồ để thể hiện human escalation.
-6. Mở GitHub PR/README history để minh họa PR summary hoặc progress automation do AI tạo.
-7. Hiển thị health/metrics endpoint hoặc dashboard, giải thích một AI metric được theo dõi.
 
 ## 19. Nguyên tắc tài liệu theo phong cách engineering nội bộ
 
