@@ -4,6 +4,52 @@ Chạy tại thư mục chứa `pom.xml`, bằng PowerShell với JDK 25.
 
 ## Dev
 
+**Cách 1: dùng script tự nạp `.env.dev`**
+
+```powershell
+.\dev.ps1
+```
+
+Chuẩn bị lần đầu: sao chép `.env.example` thành `.env.dev` nếu chưa có, rồi điền
+`POSTGRES_PASSWORD` đúng với database dev. Bật Docker Desktop/Docker Engine trước
+khi chạy script; Docker Compose cần hỗ trợ `up --wait`.
+
+Script nạp `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`,
+`POSTGRES_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `SERVER_PORT` từ `.env.dev`,
+rồi chạy `docker compose --env-file .env.dev -f compose.dev.yaml up -d --wait`.
+Sau khi PostgreSQL và Redis healthy, script chạy Maven Wrapper với profile `dev`.
+Nếu Docker Compose lỗi, script trả về mã lỗi và không chạy backend.
+Giá trị trong file được ưu tiên hơn
+biến môi trường hiện có; biến không có trong file giữ giá trị hiện có hoặc mặc
+định của ứng dụng. Script khôi phục môi trường terminal khi Maven kết thúc và
+trả về mã thoát của Maven.
+
+Ctrl+C chỉ dừng backend; PostgreSQL và Redis tiếp tục chạy nền. Có thể chạy lại
+`.\dev.ps1` khi container vẫn đang chạy; Compose dùng lại container nếu cấu hình
+không đổi. Script không tự gọi `down`, kể cả khi backend lỗi. Để dừng Docker dev:
+
+```powershell
+docker compose --env-file .env.dev -f compose.dev.yaml down
+```
+
+Lệnh này giữ dữ liệu trong volume.
+
+Mỗi biến viết trên một dòng `KEY=value`; hỗ trợ dòng trống, comment `#`,
+giá trị bọc nháy đơn hoặc nháy kép và comment cuối dòng sau khoảng trắng.
+Giá trị được giữ nguyên, không nội suy `$VAR`/`${VAR}` hay xử lý escape.
+Dùng nháy đơn quanh mật khẩu chứa `$` hoặc `#`, như mẫu cấu hình Docker.
+
+Nếu PowerShell chặn thực thi script, dùng:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1
+```
+
+**Cách 2: chạy Maven trực tiếp**
+
+Đặt các biến môi trường cần thiết trong terminal trước khi chạy (bắt buộc có
+`POSTGRES_PASSWORD`). Lệnh này không tự nạp `.env.dev`:
+
 ```powershell
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
@@ -21,6 +67,12 @@ rồi chạy `.\mvnw.cmd compile` ở terminal khác, hoặc dùng **Build Proje
 
 Test hiện tại đã có `@ActiveProfiles("test")`, tự nạp `application-test.yml` và dùng H2.
 
+Kiểm tra riêng script dev (dùng Docker và Maven giả lập, không cần database):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\dev.Tests.ps1
+```
+
 ## Prod
 
 ```powershell
@@ -36,7 +88,8 @@ java -jar target/ai-commerce-support-0.0.1-SNAPSHOT.jar --spring.profiles.active
 Dev/prod cần database và Redis đang chạy, truy cập được từ backend, cùng các biến
 môi trường tương ứng. Dev cần `POSTGRES_PASSWORD`; prod cần `POSTGRES_DB`,
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`.
-Các lệnh trên chỉ chọn Spring profile, không tự nạp `.env.dev`/`.env.prod`.
+Lệnh Maven trực tiếp chỉ chọn Spring profile, không tự nạp `.env.dev`/`.env.prod`;
+script `dev.ps1` nạp `.env.dev` cho backend dev.
 Xem [cấu hình Docker Compose](docker-compose.md) về địa chỉ kết nối từng môi trường.
 
 Liquibase chạy changelog tại `src/main/resources/db/changelog/` khi backend khởi động.

@@ -36,6 +36,11 @@ PostgreSQL lắng nghe tại `localhost:5432`, Redis tại `localhost:6379`;
 có thể đổi cổng trong `.env.dev`. Redis dev không yêu cầu mật khẩu.
 Backend chạy từ IDE/Maven và cần cấu hình kết nối tương ứng.
 `--env-file` cấp biến cho Compose, không tự cấu hình tiến trình Java chạy ngoài Docker.
+Chạy `.\dev.ps1` để nạp `.env.dev`, chạy Compose dev bằng `up -d --wait`, rồi
+khởi động backend bằng Maven với profile dev khi PostgreSQL và Redis healthy.
+Ctrl+C chỉ dừng backend; hai container tiếp tục chạy nền. Chạy lại script sẽ dùng
+lại container nếu cấu hình không đổi. Dùng lệnh `down` ở trên để dừng Docker dev;
+volume dữ liệu vẫn được giữ lại.
 
 ## Production
 
