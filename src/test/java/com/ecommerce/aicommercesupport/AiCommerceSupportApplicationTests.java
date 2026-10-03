@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +38,15 @@ class AiCommerceSupportApplicationTests {
     void otherEndpointsRequireAuthentication() throws Exception {
         mockMvc.perform(get("/actuator/health").accept("application/json"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser
+    void commerceRepositoriesDoNotExposeAutomaticRestEndpoints() throws Exception {
+        for (var path : new String[] { "/orders", "/orderItems", "/payments", "/shipments" }) {
+            mockMvc.perform(get(path))
+                    .andExpect(status().isNotFound());
+        }
     }
 
     @Test
