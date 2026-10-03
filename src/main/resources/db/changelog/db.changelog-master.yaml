@@ -2,3 +2,9 @@ databaseChangeLog:
   - include:
       file: changes/001-enable-pgvector.sql
       relativeToChangelogFile: true
+  - include:
+      file: changes/002-create-commerce-tables.sql
+      relativeToChangelogFile: true
+  - include:
+      file: changes/003-constrain-shipment-carrier.sql
+      relativeToChangelogFile: true
