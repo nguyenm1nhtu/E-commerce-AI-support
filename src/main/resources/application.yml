@@ -12,6 +12,12 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+springdoc:
+  paths-to-match: /api/**
+  override-with-generic-response: false
+  swagger-ui:
+    disable-swagger-default-url: true
+
 management:
   endpoints:
     web:

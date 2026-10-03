@@ -1,4 +1,4 @@
-package com.ecommerce.aicommercesupport;
+package com.ecommerce.aicommercesupport.common.controller;
 
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
