@@ -36,3 +36,10 @@ build/
 .env
 .env.*
 !.env.example
+
+## Docs ##
+commerce-model.md
+/docs/*
+!/docs/context.md
+!/docs/docker-compose.md
+!/docs/terminal-commands.md

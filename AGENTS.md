@@ -9,6 +9,26 @@ under `src/main/resources/`. Tests mirror the Java package structure under
 `docs/context.md`). The Maven build is defined in `pom.xml`; use the checked-in
 Maven Wrapper (`mvnw` or `mvnw.cmd`) for reproducible commands.
 
+Tài liệu trong thư mục `docs/` phải viết bằng tiếng Việt, trừ khi người dùng
+yêu cầu rõ ràng viết bằng tiếng Anh. Giữ nguyên tên kỹ thuật, định danh trong
+code, đường dẫn, lệnh và dữ liệu mẫu khi cần để bảo đảm tính chính xác.
+
+Trong `docs/`, chỉ được đưa `context.md`, `docker-compose.md` và
+`terminal-commands.md` vào Git để commit/push. Mọi tài liệu khác trong thư mục
+này, kể cả tài liệu sinh ra sau này, phải được `.gitignore` loại trừ và chỉ
+lưu cục bộ. Không dùng `git add -f` để đưa các tài liệu đó vào Git.
+
+Organize Java packages by feature module under `com.ecommerce.aicommercesupport`
+(for example, `order`, `payment`, and `shipment`), then by layer inside each
+module: `entity` for JPA entities and their domain enums, `repository` for
+Spring Data repositories, `dto` for request/response objects, `controller` for
+HTTP controllers, and `service` for application/business logic. Examples:
+`order.entity.Order`, `order.repository.OrderRepository`, and
+`payment.service.PaymentService`. Shared code belongs under `common`, grouped
+by responsibility (for example, `common.exception` and `common.controller`).
+Do not group all modules into top-level layer packages. Create packages when
+they contain actual classes; tests should mirror the module and layer layout.
+
 ## Build, Test, and Development Commands
 
 - `./mvnw clean verify` (Linux/macOS) or `./mvnw.cmd clean verify` (Windows):
