@@ -117,8 +117,8 @@ Cần PostgreSQL dev đang chạy và đã đặt `POSTGRES_HOST`, `POSTGRES_POR
    ```
 
    Kiểm tra file trong `target/`, chỉnh lại rồi thêm changeset phù hợp vào
-   `src/main/resources/db/changelog/`. Hiện dự án chưa có entity nên lệnh có thể
-   báo không có thay đổi và không tạo file.
+   `src/main/resources/db/changelog/changes/` rồi include từ master changelog.
+   Nếu entity và database đã khớp, lệnh có thể báo không có thay đổi và không tạo file.
 
 3. Đánh dấu trạng thái hiện tại trước khi áp dụng migration mới:
 

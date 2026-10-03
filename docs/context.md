@@ -2,6 +2,9 @@
 
 > Bản tóm tắt thiết kế dành cho coding agents, dựa duy nhất trên `AI_Ecommerce_Support_Project_Design.pdf`. Giữ nguyên phạm vi, tên kỹ thuật, ràng buộc và mức độ bắt buộc/tùy chọn của tài liệu; các con số trong ví dụ không được hiểu thành quy tắc chung ngoài ngữ cảnh đó. Đây là bản thiết kế, không phải báo cáo tính năng đã triển khai. Số mục bên dưới tương ứng 20 mục của PDF để đối chiếu.
 
+Các quyết định bổ sung trong quá trình phát triển được ghi rõ là ghi chú triển
+khai, tách biệt với nội dung thiết kế gốc trong PDF.
+
 ## 1. Tổng quan và định vị
 
 - **Tên tạm:** E-commerce Support AI; tên có thể thay đổi, kiến trúc và phạm vi mới là đầu ra chính.
@@ -119,11 +122,13 @@ Khách hỏi: “I received ORD-101 ten days ago. Can I return the headphones?�
 
 ### 6.1. Core entities
 
-Danh sách dưới đây là các trường/quan hệ quan trọng nêu trong nguồn, không phải schema đầy đủ được tự bổ sung.
+Danh sách dưới đây là các trường/quan hệ quan trọng nêu trong nguồn, kèm các
+trường bổ sung được giải thích trong ghi chú triển khai bên dưới; không phải
+schema đầy đủ.
 
 | Entity | Trường / quan hệ |
 | --- | --- |
-| `User` | `id`, `email`, `passwordHash`, `role` |
+| `User` | `id`, `email`, `passwordHash`, `role`; bổ sung `firstName`, `lastName` |
 | `Order` | `id`, `userId`, `status`, `orderedAt`, `totalAmount` |
 | `OrderItem` | `orderId`, `productName`, `quantity`, `unitPrice` |
 | `Payment` | `orderId`, `status`, `providerRef`, `paidAt` |
@@ -135,6 +140,29 @@ Danh sách dưới đây là các trường/quan hệ quan trọng nêu trong ng
 | `DocumentChunk` | `documentId`, `text`, `embedding`, `metadata` |
 | `AgentExecution` | `ticketId`, `model`, `status`, `latency`, `result` |
 | `ToolExecution` | `agentExecutionId`, `toolName`, `input`, `output`, `duration`, `success` |
+
+Ghi chú triển khai bổ sung (không phải ràng buộc trong PDF): `Shipment.carrier`
+dùng enum `Carrier` gồm `GHTK`, `GHN`, `VIETTEL_POST` (Viettel Post).
+Xem [commerce model](commerce-model.md) để biết mapping và ràng buộc database.
+
+Ghi chú triển khai bổ sung cho User và xác thực (theo yêu cầu ngày 2026-10-03,
+không phải ràng buộc trong PDF):
+
+- `User.firstName` là tên, có thể gồm tên đệm; `User.lastName` là họ. Mỗi trường
+  tối đa 100 ký tự, không được để trống khi tạo User qua JPA.
+- DTO xác thực nằm trong `auth/dto`. `RegisterRequest` yêu cầu `email`,
+  `password`, `firstName`, `lastName`; không nhận `role` từ người đăng ký.
+  Email phải đúng định dạng, tối đa 254 ký tự; mật khẩu đăng ký tối thiểu 8 ký tự.
+- `LoginRequest` vẫn chỉ nhận `email` và `password`, không dùng tên để đăng nhập.
+- UI sau này dùng tên để hiển thị thay cho email. Ví dụ `firstName = "Minh Tú"`,
+  `lastName = "Nguyễn"` có thể hiển thị thành `Nguyễn Minh Tú` theo thứ tự họ tên
+  tiếng Việt. Phần hiển thị UI chưa được triển khai.
+- Migration `005-add-user-names.sql` thêm `first_name` và `last_name` vào bảng
+  `users`. Các tài khoản cũ giữ giá trị `NULL` để bổ sung tên thật sau; không lấy
+  email làm tên và không tự gán tên giả. Database cho phép `NULL` để tương thích
+  dữ liệu cũ, còn DTO đăng ký và validation của entity bắt buộc đủ hai trường.
+- Hiện đã có entity, repository, migration và DTO; luồng API đăng ký/đăng nhập
+  và xác thực JWT chưa được triển khai. Danh sách API bên dưới vẫn là thiết kế.
 
 ### 6.2. API inventory
 

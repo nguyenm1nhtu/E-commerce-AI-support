@@ -11,3 +11,6 @@ databaseChangeLog:
   - include:
       file: changes/004-create-users-table.sql
       relativeToChangelogFile: true
+  - include:
+      file: changes/005-add-user-names.sql
+      relativeToChangelogFile: true

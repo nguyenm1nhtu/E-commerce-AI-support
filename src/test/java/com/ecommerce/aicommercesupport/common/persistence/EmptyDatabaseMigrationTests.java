@@ -11,6 +11,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,6 +32,37 @@ class EmptyDatabaseMigrationTests {
         verifyMigration(dataSource, true);
     }
 
+    @Test
+    void addsNameColumnsWithoutLosingExistingUsers() throws Exception {
+        try (var dataSource = new SingleConnectionDataSource(
+                "jdbc:h2:mem:user_names_" + UUID.randomUUID(), "sa", "", true)) {
+            var initialMigration = new SpringLiquibase();
+            initialMigration.setDataSource(dataSource);
+            initialMigration.setChangeLog("classpath:db/changelog/changes/004-create-users-table.sql");
+            initialMigration.setResourceLoader(new DefaultResourceLoader());
+            initialMigration.afterPropertiesSet();
+            var jdbc = new JdbcTemplate(dataSource);
+            var userId = UUID.randomUUID();
+            jdbc.update("INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)",
+                    userId, "existing@example.com", "encoded-password", "CUSTOMER");
+
+            migrate(dataSource);
+
+            assertThat(jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, userId))
+                    .isEqualTo("existing@example.com");
+            assertThat(jdbc.queryForObject("SELECT password_hash FROM users WHERE id = ?", String.class, userId))
+                    .isEqualTo("encoded-password");
+            assertThat(jdbc.queryForObject("SELECT first_name FROM users WHERE id = ?", String.class, userId)).isNull();
+            assertThat(jdbc.queryForObject("SELECT last_name FROM users WHERE id = ?", String.class, userId)).isNull();
+            jdbc.update("UPDATE users SET first_name = ?, last_name = ? WHERE id = ?", "Minh Tú", "Nguyễn", userId);
+            migrate(dataSource);
+            assertThat(jdbc.queryForObject("SELECT first_name FROM users WHERE id = ?", String.class, userId))
+                    .isEqualTo("Minh Tú");
+            assertThat(jdbc.queryForObject("SELECT last_name FROM users WHERE id = ?", String.class, userId))
+                    .isEqualTo("Nguyễn");
+        }
+    }
+
     private void verifyMigration(DataSource dataSource, boolean postgres) throws Exception {
         var jdbc = new JdbcTemplate(dataSource);
         var tableQuery = "SELECT table_name FROM information_schema.tables WHERE LOWER(table_schema) = 'public'";
@@ -46,8 +78,9 @@ class EmptyDatabaseMigrationTests {
                         "databasechangelog", "databasechangeloglock");
         var expectedIds = postgres
                 ? new String[] {"001-enable-pgvector", "002-create-commerce-tables", "003-constrain-shipment-carrier",
-                        "004-create-users-table"}
-                : new String[] {"002-create-commerce-tables", "003-constrain-shipment-carrier", "004-create-users-table"};
+                        "004-create-users-table", "005-add-user-names"}
+                : new String[] {"002-create-commerce-tables", "003-constrain-shipment-carrier",
+                        "004-create-users-table", "005-add-user-names"};
         assertThat(jdbc.queryForList("SELECT id FROM databasechangelog", String.class))
                 .containsExactlyInAnyOrder(expectedIds);
         for (var table : new String[] {"orders", "order_items", "payments", "shipments", "users"}) {

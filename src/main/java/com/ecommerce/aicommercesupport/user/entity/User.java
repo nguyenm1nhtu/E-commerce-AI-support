@@ -38,6 +38,16 @@ public class User {
     private String email;
 
     @NotBlank
+    @Size(max = 100)
+    @Column(length = 100)
+    private String firstName;
+
+    @NotBlank
+    @Size(max = 100)
+    @Column(length = 100)
+    private String lastName;
+
+    @NotBlank
     @Size(max = 255)
     @Column(nullable = false, length = 255)
     private String passwordHash;
@@ -47,9 +57,11 @@ public class User {
     @Column(nullable = false, length = 32)
     private UserRole role;
 
-    public User(String email, String passwordHash, UserRole role) {
+    public User(String email, String passwordHash, UserRole role, String firstName, String lastName) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.role = role;
+        this.firstName = firstName;
+        this.lastName = lastName;
     }
 }

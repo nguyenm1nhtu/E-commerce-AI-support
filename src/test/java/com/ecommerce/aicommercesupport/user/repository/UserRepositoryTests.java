@@ -24,8 +24,8 @@ class UserRepositoryTests {
 
     @Test
     void findsUserByEmailAndReturnsEmptyWhenAbsent() {
-        var customer = users.saveAndFlush(new User("customer@example.com", "encoded-password", UserRole.CUSTOMER));
-        var support = users.saveAndFlush(new User("support@example.com", "encoded-password", UserRole.SUPPORT_AGENT));
+        var customer = users.saveAndFlush(new User("customer@example.com", "encoded-password", UserRole.CUSTOMER, "Minh Tú", "Nguyễn"));
+        var support = users.saveAndFlush(new User("support@example.com", "encoded-password", UserRole.SUPPORT_AGENT, "Minh Tú", "Nguyễn"));
         entityManager.clear();
 
         assertThat(users.findByEmail("customer@example.com")).map(User::getId).contains(customer.getId());
@@ -35,7 +35,7 @@ class UserRepositoryTests {
 
     @Test
     void checksWhetherEmailAlreadyExists() {
-        users.saveAndFlush(new User("customer@example.com", "encoded-password", UserRole.CUSTOMER));
+        users.saveAndFlush(new User("customer@example.com", "encoded-password", UserRole.CUSTOMER, "Minh Tú", "Nguyễn"));
         entityManager.clear();
 
         assertThat(users.existsByEmail("customer@example.com")).isTrue();
