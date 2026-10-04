@@ -170,6 +170,7 @@ không phải ràng buộc trong PDF):
 | --- | --- | --- |
 | POST | `/api/auth/register` | Đăng ký |
 | POST | `/api/auth/login` | Đăng nhập JWT |
+| POST | `/api/auth/refresh` | Cấp access token mới và xoay vòng refresh token qua cookie HttpOnly |
 | GET | `/api/orders` | Danh sách đơn của customer |
 | GET | `/api/orders/{id}` | Chi tiết đơn |
 | GET | `/api/orders/{id}/payment` | Trạng thái thanh toán |
@@ -331,11 +332,72 @@ Không tự động hóa ở giai đoạn đầu:
 ### 12.1. Application security
 
 - JWT authentication và role-based authorization.
+- Tách access token và refresh token theo thiết kế bổ sung tại mục 12.1.1.
 - Object ownership checks cho order, ticket, return.
 - Validate mọi tool argument và external request.
 - Idempotency cho write tools như tạo yêu cầu trả hàng.
 - Log prompt/tool phải che credentials, tokens và dữ liệu khách hàng nhạy cảm.
 - Chỉ admin được ingest knowledge và đổi trạng thái tài liệu.
+
+#### 12.1.1. Access token và refresh token
+
+| Loại token | Mục đích | Thời hạn dự kiến |
+| --- | --- | --- |
+| Access token | JWT dùng để gọi API qua `Authorization: Bearer <accessToken>`; định danh người dùng bằng UUID và mang thông tin quyền cần thiết | Ngắn, mặc định dự kiến 15 phút |
+| Refresh token | Chuỗi ngẫu nhiên bí mật do backend quản lý, truyền qua cookie HttpOnly để xin access token mới; không dùng để gọi API nghiệp vụ | Dài hơn, mặc định dự kiến 7 ngày |
+
+Thời hạn thực tế sẽ lấy từ cấu hình khi triển khai service, không cố định trong
+DTO. Đăng nhập vẫn dùng email và password; họ tên chỉ phục vụ thông tin hồ sơ
+và hiển thị trên UI.
+
+Backend chịu trách nhiệm tạo, xác minh, lưu bản hash, xoay vòng và thu hồi
+refresh token. Frontend JavaScript không nhận refresh token trong JSON, không
+đọc hoặc tự lưu token này vào localStorage/sessionStorage. Trình duyệt vẫn lưu
+cookie và gửi về backend; `HttpOnly` ngăn JavaScript đọc cookie, không có nghĩa
+token chỉ tồn tại trên server hoặc bị ẩn khỏi người dùng trong DevTools.
+
+Luồng dự kiến:
+
+1. Sau khi đăng ký hoặc đăng nhập thành công, server trả body `AuthResponse`
+   gồm `accessToken`, `tokenType` (giá trị `Bearer`), `expiresIn` (thời hạn còn
+   lại của access token, tính bằng giây), cùng `userId`, `email`, `firstName`,
+   `lastName`, `role`. Body không có `refreshToken`, `refreshExpiresIn`, password
+   hoặc password hash. Refresh token được đặt riêng qua header `Set-Cookie`.
+2. Cookie refresh token dùng `HttpOnly`, `Secure` khi chạy HTTPS, `SameSite=Lax`
+   cho mô hình triển khai cùng site và `Path=/api/auth`; không đặt `Domain` để
+   giới hạn cookie ở host của backend. `Max-Age` theo thời hạn refresh token;
+   server vẫn phải kiểm tra hạn dùng độc lập. Môi trường dev HTTP cục bộ có thể
+   tắt `Secure` qua cấu hình riêng, không áp dụng ngoại lệ này cho production.
+3. Client dùng access token để gọi API. Khi token hết hạn, client gọi
+   `POST /api/auth/refresh` không cần body chứa token. Trình duyệt tự gửi cookie;
+   backend lấy refresh token từ cookie, không từ `RefreshTokenRequest`.
+   Nếu frontend gọi backend khác origin, request cần `credentials: 'include'`
+   và CORS chỉ cho phép origin cụ thể cùng credentials. Nếu triển khai khác
+   site, cần cấu hình `SameSite=None; Secure` thay cho `Lax`.
+4. Server kiểm tra refresh token còn hạn, chưa bị thu hồi và thuộc tài khoản
+   hợp lệ; vô hiệu hóa token vừa dùng và cấp cặp token mới trong một giao dịch.
+   Access token mới nằm trong body `AuthResponse`; refresh token mới thay cookie
+   cũ qua `Set-Cookie`. Thiếu cookie, token không hợp lệ, hết hạn hoặc bị thu hồi
+   trả về `401`; client phải đăng nhập lại.
+5. Mỗi refresh token chỉ được dùng một lần. Server lưu bản hash của token,
+   người dùng, hạn dùng, trạng thái thu hồi và thông tin chuỗi phiên để hỗ trợ
+   xoay vòng và phát hiện sử dụng lại. Khi phát hiện token đã dùng bị dùng lại,
+   thu hồi chuỗi phiên liên quan. Đăng xuất thu hồi refresh token của phiên và
+   xóa cookie bằng cùng tên, phạm vi cookie và `Max-Age=0`. Access token đã cấp
+   vẫn có thể còn hiệu lực đến khi hết hạn nếu chưa có cơ chế thu hồi riêng.
+
+Các endpoint xác thực dùng cookie phải có biện pháp chống CSRF phù hợp trong
+Spring Security, gồm kiểm tra CSRF token cho thao tác thay đổi trạng thái.
+Không tắt CSRF toàn cục chỉ vì API nghiệp vụ dùng JWT; `HttpOnly`, CORS và
+`SameSite` không thay thế hoàn toàn việc kiểm tra CSRF.
+
+Trạng thái triển khai: `AuthResponse` đã bỏ `refreshToken` và `refreshExpiresIn`;
+đã xóa `RefreshTokenRequest` nhận token từ body. Test kiểm tra JSON của response
+chỉ chứa access token và thông tin công khai theo hợp đồng trên.
+
+Chưa có API đăng ký/đăng nhập/refresh/logout, dịch vụ cấp/xác minh JWT, cấu hình
+cookie/thời hạn, nơi lưu hash refresh token hay cơ chế xoay vòng/thu hồi.
+Các hành vi trên là yêu cầu thiết kế, chưa phải chức năng đã triển khai.
 
 ### 12.2. Kiểm soát AI
 
