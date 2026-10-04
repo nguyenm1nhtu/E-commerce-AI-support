@@ -38,6 +38,8 @@ exit /b 23
     Password = $env:POSTGRES_PASSWORD
     Database = $env:POSTGRES_DB
     Port = $env:SERVER_PORT
+    RedisNamespace = $env:REDIS_NAMESPACE
+    RedisCacheTtl = $env:REDIS_CACHE_TTL
     Directory = (Get-Location).Path
     Arguments = $args
     DockerStarted = Test-Path -LiteralPath (Join-Path $PSScriptRoot 'docker-calls.txt')
@@ -57,12 +59,15 @@ POSTGRES_PASSWORD='fake$literal#with=equals' # comment
 POSTGRES_DB="dev database" # comment
 SERVER_PORT=8088 # comment
 REDIS_PASSWORD=ignored
+REDIS_NAMESPACE=dev-cache-test
+REDIS_CACHE_TTL=3m
 '@ | Set-Content -LiteralPath (Join-Path $fixture '.env.dev') -Encoding UTF8
     $result = Invoke-Dev
     Assert-True ($result.Code -eq 23) 'Maven exit code must propagate.'
     $captured = Get-Content -Raw -LiteralPath (Join-Path $fixture 'capture.json') | ConvertFrom-Json
     Assert-True ($captured.Password -ceq 'fake$literal#with=equals') 'Password must remain literal.'
     Assert-True ($captured.Database -eq 'dev database' -and $captured.Port -eq '8088') 'Quotes and comments must be parsed.'
+    Assert-True ($captured.RedisNamespace -eq 'dev-cache-test' -and $captured.RedisCacheTtl -eq '3m') 'Redis settings must reach Maven.'
     Assert-True ($captured.Directory -eq $fixture) 'Maven must run relative to the script directory.'
     Assert-True ($captured.DockerStarted) 'Docker must start before Maven.'
     Assert-True (($captured.Arguments -join '|') -eq 'spring-boot:run|-Dspring-boot.run.profiles=dev') 'Maven must receive the dev profile.'

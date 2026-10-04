@@ -9,6 +9,7 @@ import com.ecommerce.aicommercesupport.order.entity.OrderItem;
 import com.ecommerce.aicommercesupport.order.repository.OrderItemRepository;
 import com.ecommerce.aicommercesupport.order.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,12 +27,14 @@ public class OrderItemService {
                 .orElseThrow(() -> new ResourceNotFoundException("Order item not found: " + id));
     }
 
+    @Cacheable(cacheNames = "order-item", key = "#orderId.toString() + ':' + #id.toString()")
     public OrderItemDto getOrderItemByIdAndOrderId(UUID id, UUID orderId) {
         return orderItemRepository.findByIdAndOrder_Id(id, orderId)
                 .map(this::toDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Order item not found in order: " + orderId));
     }
 
+    @Cacheable(cacheNames = "order-items", key = "#orderId")
     public List<OrderItemDto> getOrderItemsByOrderId(UUID orderId) {
         if (!orderRepository.existsById(orderId)) {
             throw new ResourceNotFoundException("Order not found: " + orderId);

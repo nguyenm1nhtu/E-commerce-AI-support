@@ -15,7 +15,7 @@ Chuẩn bị lần đầu: sao chép `.env.example` thành `.env.dev` nếu chư
 khi chạy script; Docker Compose cần hỗ trợ `up --wait`.
 
 Script nạp `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`,
-`POSTGRES_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `SERVER_PORT` từ `.env.dev`,
+`POSTGRES_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_NAMESPACE`, `REDIS_CACHE_TTL`, `SERVER_PORT` từ `.env.dev`,
 rồi chạy `docker compose --env-file .env.dev -f compose.dev.yaml up -d --wait`.
 Sau khi PostgreSQL và Redis healthy, script chạy Maven Wrapper với profile `dev`.
 Nếu Docker Compose lỗi, script trả về mã lỗi và không chạy backend.
@@ -66,6 +66,27 @@ rồi chạy `.\mvnw.cmd compile` ở terminal khác, hoặc dùng **Build Proje
 ```
 
 Test hiện tại đã có `@ActiveProfiles("test")`, tự nạp `application-test.yml` và dùng H2.
+
+Profile test tắt Spring Cache để không cần Redis cho suite thông thường.
+Test tích hợp Redis chạy tùy chọn trên instance riêng, không dùng dữ liệu dev/prod:
+
+```powershell
+docker run --detach --rm --name ai-commerce-support-redis-test --publish 127.0.0.1::6379 redis:7-alpine
+try {
+    $redisTestAddress = docker port ai-commerce-support-redis-test 6379/tcp
+    $redisTestPort = ($redisTestAddress -split ':')[-1]
+    .\mvnw.cmd test "-Dredis.integration.port=$redisTestPort"
+} finally {
+    docker stop ai-commerce-support-redis-test
+}
+```
+
+`RedisIntegrationTests` kiểm tra ghi/đọc chuỗi kèm TTL, JSON DTO qua CacheManager,
+và xóa cache không ảnh hưởng key auth. `CommerceRedisCacheTests` kiểm tra API
+payment/shipment/order items có cache hit, giữ kiểm tra quyền sở hữu, không cache lỗi `404`,
+có TTL và đọc lại dữ liệu sau eviction/hết hạn. Không truyền cổng Redis production vào test.
+`REDIS_NAMESPACE` và `REDIS_CACHE_TTL` có thể đặt trong `.env.dev` khi chạy
+`dev.ps1`; mặc định lần lượt là `ai-commerce-support` và `10m`.
 
 Kiểm tra riêng script dev (dùng Docker và Maven giả lập, không cần database):
 

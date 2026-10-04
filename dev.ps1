@@ -3,7 +3,8 @@ $ErrorActionPreference = 'Stop'
 $envFile = Join-Path $PSScriptRoot '.env.dev'
 $allowedVariables = @(
     'POSTGRES_HOST', 'POSTGRES_PORT', 'POSTGRES_DB', 'POSTGRES_USER',
-    'POSTGRES_PASSWORD', 'REDIS_HOST', 'REDIS_PORT', 'SERVER_PORT'
+    'POSTGRES_PASSWORD', 'REDIS_HOST', 'REDIS_PORT', 'REDIS_NAMESPACE',
+    'REDIS_CACHE_TTL', 'SERVER_PORT'
 )
 $previousValues = @{}
 $exitCode = 1

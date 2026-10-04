@@ -8,6 +8,7 @@ import com.ecommerce.aicommercesupport.shipment.dto.ShipmentDto;
 import com.ecommerce.aicommercesupport.shipment.entity.Shipment;
 import com.ecommerce.aicommercesupport.shipment.repository.ShipmentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ public class ShipmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment not found: " + id));
     }
 
+    @Cacheable(cacheNames = "shipment-by-order", key = "#orderId")
     public ShipmentDto getShipmentByOrderId(UUID orderId) {
         return findShipmentByOrderId(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment not found for order: " + orderId));

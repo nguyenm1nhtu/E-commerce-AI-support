@@ -1,6 +1,12 @@
 spring:
   application:
     name: ai-commerce-support
+  cache:
+    type: redis
+  data:
+    redis:
+      repositories:
+        enabled: false
   jpa:
     open-in-view: false
     hibernate:
@@ -10,6 +16,9 @@ spring:
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
 app:
+  redis:
+    namespace: ${REDIS_NAMESPACE:ai-commerce-support}
+    cache-ttl: ${REDIS_CACHE_TTL:10m}
   auth:
     refresh-token-cookie:
       name: refresh_token

@@ -8,6 +8,7 @@ import com.ecommerce.aicommercesupport.payment.dto.PaymentDto;
 import com.ecommerce.aicommercesupport.payment.entity.Payment;
 import com.ecommerce.aicommercesupport.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ public class PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found: " + id));
     }
 
+    @Cacheable(cacheNames = "payment-by-order", key = "#orderId")
     public PaymentDto getPaymentByOrderId(UUID orderId) {
         return findPaymentByOrderId(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found for order: " + orderId));

@@ -57,6 +57,28 @@ focused and place new tests in the matching package. No repository-level
 formatter or linter is configured; follow the surrounding Spring and Java
 style and keep imports and formatting clean.
 
+## Cache Guidelines
+
+Chủ động áp dụng Redis cache cho API đọc khi dữ liệu thường được đọc lại, ít
+thay đổi và chấp nhận được độ trễ cập nhật; không cache mọi API một cách máy móc.
+Mỗi lần thêm hoặc đổi cache, phải báo rõ cho người dùng endpoint/method đã đổi,
+cache key, TTL và giới hạn về độ mới của dữ liệu; cập nhật `docs/context.md`.
+
+- Dùng DTO, không cache entity JPA, credentials hoặc token. Đặt TTL hữu hạn.
+- Kiểm tra authentication và ownership/authorization trước khi đọc cache,
+  kể cả cache hit; không cache kết quả kiểm tra quyền.
+- Key phải phân biệt đầy đủ resource, user/tenant nếu dữ liệu phụ thuộc người
+  xem, và filter/page/sort nếu cache danh sách có truy vấn hoặc phân trang.
+- Không cache lỗi `404`/`403`; có thể cache danh sách rỗng của resource tồn tại.
+- Khi thêm API ghi, evict các cache bị ảnh hưởng sau transaction commit, gồm
+  cache chi tiết, danh sách và dữ liệu tổng hợp. Nếu chưa có luồng ghi, ghi rõ
+  giới hạn stale theo TTL và việc cập nhật database trực tiếp không tự evict.
+- Test cache hit/miss, cách ly dữ liệu và quyền truy cập trên cache đã có sẵn,
+  reload sau eviction/hết hạn; kiểm tra JSON round-trip và TTL với Redis thật
+  khi thêm kiểu dữ liệu cache mới, đặc biệt collection hoặc dữ liệu phân trang.
+- Không dùng cache làm kho phiên/refresh token, không dùng `FLUSHDB` hoặc
+  `FLUSHALL` để xóa cache trên Redis đang giữ dữ liệu auth.
+
 ## Testing Guidelines
 
 Tests use JUnit 5 with Spring Boot test support. Name test classes with the

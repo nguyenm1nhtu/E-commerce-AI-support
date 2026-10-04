@@ -432,6 +432,85 @@ request thực tế cho đến khi API auth gọi helper. Spring Security vẫn 
 việc tích hợp CSRF token cho frontend và CORS theo origin cụ thể sẽ thực hiện
 cùng API auth. Không mở endpoint hoặc tắt CSRF trong bước chuẩn bị cookie này.
 
+#### 12.1.2. Redis cho refresh token và cache
+
+Đã chuẩn bị hạ tầng Redis trong `common/config/RedisConfiguration`,
+`RedisProperties` và `common/redis/RedisKeys`. Spring Boot tự cấu hình kết nối
+Lettuce và `StringRedisTemplate` từ `spring.data.redis.*`; không tạo thêm kết nối
+thủ công. Dev kết nối `localhost:6379`, prod mặc định `redis:6379` và yêu cầu
+`REDIS_PASSWORD`. Redis trong Compose đã bật AOF và có volume lưu dữ liệu.
+
+| Thành phần | Quy ước |
+| --- | --- |
+| Namespace | `app.redis.namespace`, mặc định `ai-commerce-support`; đổi bằng `REDIS_NAMESPACE`, chỉ dùng chữ, số, `_`, `-` |
+| Key refresh token | `RedisKeys.refreshToken(tokenHash)` tạo `<namespace>:auth:refresh:<sha256-hex>`; chỉ nhận hash SHA-256 gồm 64 ký tự hex thường, không nhận raw token |
+| Dữ liệu auth | Dùng `StringRedisTemplate` cho chuỗi/JSON metadata do service auth quản lý; mỗi lần ghi phải kèm TTL theo hạn token còn lại |
+| Key cache | `<namespace>:cache:<cacheName>::<key>`, tách khỏi dữ liệu auth |
+| TTL cache | `app.redis.cache-ttl`, mặc định 10 phút; đổi bằng `REDIS_CACHE_TTL`, phải ít nhất 1 ms; độc lập với hạn refresh token/cookie |
+| Serialization cache | Key dạng chuỗi, value JSON qua Jackson 3; chỉ cho phép metadata kiểu thuộc package ứng dụng và các kiểu Java được cấu hình, không dùng Java native serialization |
+| Spring Cache | Đã bật `@EnableCaching`, dùng Redis CacheManager, không cache `null`; ghi/xóa đồng bộ với Redis, chờ transaction commit khi có transaction Spring |
+| Xóa cache | Dùng `SCAN` theo prefix cache thay vì `KEYS`; xóa cache không xóa key auth |
+| Test | Profile `test` đặt `spring.cache.type=none`; suite thông thường không cần Redis. Test tích hợp riêng bật bằng `-Dredis.integration.port=<port>` |
+
+Đã áp dụng `@Cacheable` cho bốn API đọc dữ liệu theo order:
+
+| API | Method service | Cache | Key |
+| --- | --- | --- | --- |
+| `GET /api/orders/{orderId}/payment` | `PaymentService.getPaymentByOrderId` | `payment-by-order` | `orderId` |
+| `GET /api/orders/{orderId}/shipment` | `ShipmentService.getShipmentByOrderId` | `shipment-by-order` | `orderId` |
+| `GET /api/orders/{orderId}/items` | `OrderItemService.getOrderItemsByOrderId` | `order-items` | `orderId` |
+| `GET /api/orders/{orderId}/items/{itemId}` | `OrderItemService.getOrderItemByIdAndOrderId` | `order-item` | `orderId:itemId` |
+
+Controller luôn gọi `OrderService.requireOrderOwnership(orderId, userId)` trước
+khi gọi method có cache. Cache hit vẫn kiểm tra quyền trên database; không cache
+kết quả kiểm tra quyền. DTO của các API trên không thay đổi theo người xem, nên
+key dùng ID resource sau bước kiểm tra quyền. Chi tiết item dùng cả `orderId` và
+`itemId` để không trả item đã cache khi được yêu cầu dưới một order khác.
+Người khác, request chưa đăng nhập hoặc
+người dùng đã mất quyền sở hữu không được đọc dữ liệu từ cache đã có sẵn.
+Caller nội bộ mới của các method này cũng phải kiểm tra quyền trước khi gọi.
+
+Request đầu đọc repository và ghi DTO vào Redis; các request tiếp theo dùng DTO
+đã cache, bỏ truy vấn payment/shipment/item nhưng vẫn truy vấn order để kiểm tra quyền.
+Danh sách item được cache dưới dạng `List<OrderItemDto>`, kể cả danh sách rỗng
+của order tồn tại. `order/config/OrderCacheConfiguration` cấu hình JSON serializer
+riêng cho kiểu danh sách này và khôi phục danh sách không thể sửa, tránh phụ thuộc
+metadata kiểu collection của serializer chung. Không cache lỗi `404`.
+Dữ liệu có thể cũ tối đa TTL đang cấu hình (`10m` mặc định,
+đổi bằng `REDIS_CACHE_TTL`, ví dụ `30s`). Hiện chưa có API ghi payment/shipment;
+khi bổ sung, phải evict cache tương ứng theo `orderId` sau transaction commit.
+Khi thêm/sửa/xóa item, phải evict `order-items` theo `orderId` và `order-item`
+theo `orderId:itemId` cho các item bị ảnh hưởng sau transaction commit.
+Thay đổi trực tiếp database chưa tự xóa cache. API chi tiết order đang gọi các
+method `findPaymentByOrderId`/`findShipmentByOrderId` không cache, nên có thể thấy
+giá trị mới sớm hơn hai API riêng trong thời gian TTL. Riêng danh sách items trong
+response chi tiết order dùng chung cache `order-items`, vì gọi qua bean
+`OrderItemService`. Không cache toàn bộ response chi tiết order hoặc danh sách
+order phân trang: các dữ liệu tổng hợp này chưa có cơ chế invalidation phù hợp.
+Các method tra cứu khác chưa áp dụng cache.
+
+Test `CommerceCacheTests` chạy mặc định với cache memory để kiểm tra cache hit,
+quyền truy cập, không cache `404`, phân biệt order/item, danh sách rỗng và reload sau eviction.
+`CommerceRedisCacheTests` chạy lại các tình huống đó bằng Redis thật khi truyền
+`redis.integration.port`, đồng thời kiểm tra JSON, TTL và reload khi key hết hạn.
+
+Khi bổ sung cache khác, dùng DTO và key bao gồm người dùng/điều kiện truy vấn nếu
+dữ liệu phụ thuộc người xem; không cache entity JPA, mật khẩu, raw refresh token
+hay toàn bộ `AuthResponse`.
+Hiện lỗi Redis được truyền lên; chưa có fallback cache hoặc cơ chế tiếp tục
+xác thực khi Redis không khả dụng.
+
+Chưa triển khai kho lưu refresh token, hash token, phát hiện dùng lại, xoay vòng
+hoặc thu hồi phiên. `RedisKeys` chỉ chuẩn hóa tên key, không tự hash hay xác minh
+token. Service auth sau này phải ghi metadata kèm TTL, xử lý xoay vòng nguyên tử
+và từ chối refresh nếu thiếu dữ liệu phiên. Không dùng Spring Cache làm kho auth.
+Prefix chỉ tách tên key, không tách tài nguyên hoặc quyền truy cập; không dùng
+`FLUSHDB`/`FLUSHALL` để xóa cache trên Redis đang giữ phiên. Nếu cần chính sách
+eviction riêng cho cache, tách Redis instance để tránh loại bỏ dữ liệu phiên.
+
+Tham khảo [Spring Boot Cache](https://docs.spring.io/spring-boot/reference/io/caching.html)
+và [Spring Data Redis Cache](https://docs.spring.io/spring-data/redis/reference/redis/redis-cache.html).
+
 ### 12.2. Kiểm soát AI
 
 | Rủi ro | Biện pháp |
