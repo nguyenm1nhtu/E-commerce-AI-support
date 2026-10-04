@@ -356,6 +356,16 @@ refresh token. Frontend JavaScript không nhận refresh token trong JSON, khôn
 cookie và gửi về backend; `HttpOnly` ngăn JavaScript đọc cookie, không có nghĩa
 token chỉ tồn tại trên server hoặc bị ẩn khỏi người dùng trong DevTools.
 
+**5 điều kiện của cookie refresh token:**
+
+| Thuộc tính | Cấu hình và điều kiện áp dụng | Mục đích |
+| --- | --- | --- |
+| `HttpOnly` | Luôn bật, cả dev và prod | Ngăn JavaScript đọc cookie chứa refresh token |
+| `Secure` | Mặc định bật; prod dùng HTTPS. Dev HTTP localhost mặc định tắt, có thể bật bằng `AUTH_REFRESH_COOKIE_SECURE=true` khi dùng HTTPS | Chỉ gửi cookie qua HTTPS khi bật |
+| `SameSite` | Mặc định `Lax` cho cùng site; hỗ trợ `Strict` và `None`. `None` bắt buộc đi kèm `Secure=true` | Kiểm soát việc gửi cookie trong request khác site; không thay thế kiểm tra CSRF |
+| `Path` | Cố định `/api/auth`; không đặt `Domain` để cookie chỉ thuộc host backend | Giới hạn cookie được gửi tới các đường dẫn auth phù hợp trên host backend |
+| `Max-Age` | Mặc định `7d` (604800 giây), cấu hình phải là số giây nguyên dương. Khi phát hành, không vượt thời hạn còn lại của refresh token; khi xóa dùng `0` | Giới hạn thời gian trình duyệt giữ cookie; backend vẫn phải kiểm tra hạn dùng token độc lập |
+
 Luồng dự kiến:
 
 1. Sau khi đăng ký hoặc đăng nhập thành công, server trả body `AuthResponse`
@@ -395,9 +405,32 @@ Trạng thái triển khai: `AuthResponse` đã bỏ `refreshToken` và `refresh
 đã xóa `RefreshTokenRequest` nhận token từ body. Test kiểm tra JSON của response
 chỉ chứa access token và thông tin công khai theo hợp đồng trên.
 
-Chưa có API đăng ký/đăng nhập/refresh/logout, dịch vụ cấp/xác minh JWT, cấu hình
-cookie/thời hạn, nơi lưu hash refresh token hay cơ chế xoay vòng/thu hồi.
-Các hành vi trên là yêu cầu thiết kế, chưa phải chức năng đã triển khai.
+Đã có `RefreshTokenCookieProperties` trong `auth/config` và bean
+`RefreshTokenCookieService` trong `auth/service` để chuẩn bị tích hợp API auth:
+
+- `write(response, token)` thêm header `Set-Cookie`, không ghi token vào body
+  và không ghi đè các cookie khác. Cookie luôn có `HttpOnly`, `Path=/api/auth`,
+  không có `Domain`; mặc định tên `refresh_token`, `SameSite=Lax`, thời hạn 7 ngày.
+- `write(response, token, remainingLifetime)` giới hạn `Max-Age` theo giá trị nhỏ
+  hơn giữa thời hạn token còn lại và cấu hình cookie. Khi cấp token, service auth
+  cần bảo đảm thời hạn cookie không vượt thời hạn token thực tế.
+- `read(request)` chỉ đọc cookie đúng tên; trả `Optional.empty()` khi thiếu,
+  rỗng hoặc có nhiều cookie cùng tên. Giá trị đọc được chưa được xác thực;
+  controller/service auth phải kiểm tra token trước khi sử dụng.
+- `clear(response)` xóa cookie bằng cùng tên, path và thuộc tính bảo mật với
+  `Max-Age=0`. Thao tác này không thay thế thu hồi token phía server.
+- Cấu hình nằm dưới `app.auth.refresh-token-cookie`. Mặc định và profile `prod`
+  bật `Secure`; profile `dev` mặc định tắt để dùng HTTP localhost. Có thể đặt
+  `AUTH_REFRESH_COOKIE_SECURE=true` cho dev HTTPS, `AUTH_REFRESH_COOKIE_SAME_SITE`
+  (`Lax`, `Strict`, `None`) và `AUTH_REFRESH_COOKIE_MAX_AGE` (ví dụ `7d`, `12h`).
+  Ứng dụng từ chối cấu hình `SameSite=None` nếu không bật `Secure`, tên cookie
+  không hợp lệ, hoặc thời hạn không phải số giây nguyên dương.
+
+Chưa có API đăng ký/đăng nhập/refresh/logout, dịch vụ cấp/xác minh JWT, nơi lưu
+hash refresh token hay cơ chế xoay vòng/thu hồi. Chưa phát hành cookie cho
+request thực tế cho đến khi API auth gọi helper. Spring Security vẫn giữ CSRF;
+việc tích hợp CSRF token cho frontend và CORS theo origin cụ thể sẽ thực hiện
+cùng API auth. Không mở endpoint hoặc tắt CSRF trong bước chuẩn bị cookie này.
 
 ### 12.2. Kiểm soát AI
 
