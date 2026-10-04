@@ -9,6 +9,14 @@ spring:
     enabled: true
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
+app:
+  auth:
+    refresh-token-cookie:
+      name: refresh_token
+      secure: true
+      same-site: ${AUTH_REFRESH_COOKIE_SAME_SITE:Lax}
+      max-age: ${AUTH_REFRESH_COOKIE_MAX_AGE:7d}
+
 server:
   port: ${SERVER_PORT:8080}
 

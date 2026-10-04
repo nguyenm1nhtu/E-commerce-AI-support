@@ -11,6 +11,11 @@ spring:
       connect-timeout: 2s
       timeout: 2s
 
+app:
+  auth:
+    refresh-token-cookie:
+      secure: true
+
 logging:
   level:
     root: INFO

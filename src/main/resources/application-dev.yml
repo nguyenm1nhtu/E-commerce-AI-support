@@ -10,6 +10,11 @@ spring:
       connect-timeout: 2s
       timeout: 2s
 
+app:
+  auth:
+    refresh-token-cookie:
+      secure: ${AUTH_REFRESH_COOKIE_SECURE:false}
+
 server:
   address: localhost
 
