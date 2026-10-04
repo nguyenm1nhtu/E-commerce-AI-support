@@ -4,7 +4,8 @@ $envFile = Join-Path $PSScriptRoot '.env.dev'
 $allowedVariables = @(
     'POSTGRES_HOST', 'POSTGRES_PORT', 'POSTGRES_DB', 'POSTGRES_USER',
     'POSTGRES_PASSWORD', 'REDIS_HOST', 'REDIS_PORT', 'REDIS_NAMESPACE',
-    'REDIS_CACHE_TTL', 'SERVER_PORT'
+    'REDIS_CACHE_TTL', 'SERVER_PORT', 'JWT_SECRET', 'JWT_ISSUER',
+    'JWT_AUDIENCE', 'JWT_ACCESS_TOKEN_TTL'
 )
 $previousValues = @{}
 $exitCode = 1
