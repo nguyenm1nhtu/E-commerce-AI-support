@@ -15,7 +15,9 @@ Chuẩn bị lần đầu: sao chép `.env.example` thành `.env.dev` nếu chư
 khi chạy script; Docker Compose cần hỗ trợ `up --wait`.
 
 Script nạp `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`,
-`POSTGRES_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_NAMESPACE`, `REDIS_CACHE_TTL`, `SERVER_PORT` từ `.env.dev`,
+`POSTGRES_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_NAMESPACE`,
+`REDIS_CACHE_TTL`, `SERVER_PORT`, `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`,
+`JWT_ACCESS_TOKEN_TTL` từ `.env.dev`,
 rồi chạy `docker compose --env-file .env.dev -f compose.dev.yaml up -d --wait`.
 Sau khi PostgreSQL và Redis healthy, script chạy Maven Wrapper với profile `dev`.
 Nếu Docker Compose lỗi, script trả về mã lỗi và không chạy backend.
@@ -56,6 +58,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1
 
 Backend dev chạy tại `http://localhost:8080`.
 
+Backend yêu cầu `JWT_SECRET`: Base64 của ít nhất 32 byte ngẫu nhiên. `dev.ps1`
+nạp giá trị từ `.env.dev`; chạy Maven trực tiếp phải tự đặt biến môi trường.
+Tạo secret mới trong môi trường PowerShell hiện tại mà không in giá trị:
+
+```powershell
+$jwtKeyBytes = New-Object byte[] 32
+$jwtRng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $jwtRng.GetBytes($jwtKeyBytes) } finally { $jwtRng.Dispose() }
+$env:JWT_SECRET = [Convert]::ToBase64String($jwtKeyBytes)
+```
+
+Giữ secret ổn định trong file env riêng hoặc secret manager; không chạy lệnh tạo
+mới mỗi lần khởi động nếu muốn token đã cấp tiếp tục có hiệu lực. Không ghi secret
+vào Git hay log. `.env.example` chỉ chứa tên biến, không chứa secret thật.
+Tùy chọn: `JWT_ISSUER=ai-commerce-support`, `JWT_AUDIENCE=ai-commerce-support-api`,
+`JWT_ACCESS_TOKEN_TTL=15m`. API hiện dùng Bearer JWT; HTTP Basic/form login đã bỏ.
+Chưa có endpoint đăng ký/đăng nhập để client tự lấy token.
+
 DevTools tự khởi động lại backend sau khi code Java được biên dịch. Giữ lệnh trên chạy,
 rồi chạy `.\mvnw.cmd compile` ở terminal khác, hoặc dùng **Build Project** trong IDE.
 
@@ -95,6 +115,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\dev.Tests.ps
 ```
 
 ## Prod
+
+Production phải dùng `JWT_SECRET` riêng và truyền các biến JWT vào tiến trình
+backend. File `.env.prod` dùng cho Compose hiện tại chỉ cấp biến cho dịch vụ được
+khai báo trong Compose; không tự nạp biến vào Java chạy ngoài Docker. Không dùng
+secret test hoặc dùng chung secret dev/prod.
 
 ```powershell
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=prod"

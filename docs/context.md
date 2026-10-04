@@ -161,8 +161,9 @@ không phải ràng buộc trong PDF):
   `users`. Các tài khoản cũ giữ giá trị `NULL` để bổ sung tên thật sau; không lấy
   email làm tên và không tự gán tên giả. Database cho phép `NULL` để tương thích
   dữ liệu cũ, còn DTO đăng ký và validation của entity bắt buộc đủ hai trường.
-- Hiện đã có entity, repository, migration và DTO; luồng API đăng ký/đăng nhập
-  và xác thực JWT chưa được triển khai. Danh sách API bên dưới vẫn là thiết kế.
+- Hiện đã có entity, repository, migration, DTO và hạ tầng phát hành/xác minh
+  JWT access token. Luồng API đăng ký/đăng nhập chưa được triển khai; các endpoint
+  auth bên dưới vẫn là thiết kế.
 
 ### 6.2. API inventory
 
@@ -426,11 +427,11 @@ chỉ chứa access token và thông tin công khai theo hợp đồng trên.
   Ứng dụng từ chối cấu hình `SameSite=None` nếu không bật `Secure`, tên cookie
   không hợp lệ, hoặc thời hạn không phải số giây nguyên dương.
 
-Chưa có API đăng ký/đăng nhập/refresh/logout, dịch vụ cấp/xác minh JWT, nơi lưu
-hash refresh token hay cơ chế xoay vòng/thu hồi. Chưa phát hành cookie cho
-request thực tế cho đến khi API auth gọi helper. Spring Security vẫn giữ CSRF;
-việc tích hợp CSRF token cho frontend và CORS theo origin cụ thể sẽ thực hiện
-cùng API auth. Không mở endpoint hoặc tắt CSRF trong bước chuẩn bị cookie này.
+Chưa có API đăng ký/đăng nhập/refresh/logout, nơi lưu hash refresh token hay cơ
+chế xoay vòng/thu hồi. Đã có service cấp JWT và decoder xác minh access token
+(mục 12.1.3). Chưa phát hành cookie cho request thực tế cho đến khi API auth gọi
+helper. Filter chain auth giữ CSRF kể cả request có header Bearer; việc cấp CSRF
+token cho frontend và CORS theo origin cụ thể sẽ thực hiện cùng API auth.
 
 #### 12.1.2. Redis cho refresh token và cache
 
@@ -510,6 +511,47 @@ eviction riêng cho cache, tách Redis instance để tránh loại bỏ dữ li
 
 Tham khảo [Spring Boot Cache](https://docs.spring.io/spring-boot/reference/io/caching.html)
 và [Spring Data Redis Cache](https://docs.spring.io/spring-data/redis/reference/redis/redis-cache.html).
+
+#### 12.1.3. Cấu hình và phát hành JWT access token
+
+Đã thêm starter OAuth2 Resource Server của Spring Boot và các bean trong
+`auth/config/JwtConfiguration`: `JwtEncoder`, `JwtDecoder`,
+`JwtAuthenticationConverter`, UTC `Clock` và `PasswordEncoder` dạng delegating
+(mặc định bcrypt, hash có tiền tố `{bcrypt}`). Không tự viết filter parse JWT.
+
+`JwtService.generateAccessToken(userId, role)` trả đối tượng `Jwt`: lấy chuỗi
+bằng `getTokenValue()` và hạn dùng bằng `getExpiresAt()`. Chỉ gọi sau khi đã xác
+thực user; role phải lấy từ dữ liệu server, không nhận từ request đăng ký.
+Service này chưa được công khai thành endpoint cấp token.
+
+| Cấu hình | Giá trị / quy tắc |
+| --- | --- |
+| `JWT_SECRET` | Bắt buộc, Base64 của ít nhất 32 byte ngẫu nhiên; không có secret mặc định cho dev/prod. Mỗi môi trường dùng secret riêng |
+| `JWT_ISSUER` | Mặc định `ai-commerce-support` |
+| `JWT_AUDIENCE` | Mặc định `ai-commerce-support-api` |
+| `JWT_ACCESS_TOKEN_TTL` | Mặc định `15m`, phải là số giây nguyên dương; độc lập với cookie/refresh token và TTL Redis cache |
+| Thuật toán | Chỉ HS256; decoder không tin thuật toán tùy ý do token yêu cầu |
+| Claims | `sub` = UUID user, `role` = `CUSTOMER`/`SUPPORT_AGENT`, `token_use=access`, `iss`, `aud`, `iat`, `nbf`, `exp`, `jti` ngẫu nhiên |
+| Xác minh | Chữ ký, issuer, audience, UUID, role, loại token và các mốc thời gian bắt buộc; cho phép lệch đồng hồ 30 giây |
+| Authority | `ROLE_CUSTOMER` hoặc `ROLE_SUPPORT_AGENT`; principal name lấy từ `sub` để giữ kiểm tra quyền sở hữu hiện có |
+
+API nghiệp vụ hiện nhận `Authorization: Bearer <accessToken>`, dùng session
+policy `STATELESS`; đã thay HTTP Basic/form login bằng Bearer JWT. Swagger dùng
+security scheme `bearerAuth`. Token không hợp lệ trả `401`; role chưa thay thế
+kiểm tra ownership trên từng order. Access token không chứa password, email
+hoặc refresh token. `JwtProperties.toString()` che secret.
+
+`/api/auth/**` có filter chain riêng, giữ CSRF và không miễn CSRF chỉ vì có
+Bearer header. Các POST register/login/refresh/logout đã được khai báo permit
+để chuẩn bị controller; chưa có controller nên chưa thực hiện đăng ký/đăng nhập.
+Client cần luồng lấy CSRF token khi các API này được triển khai. Hạ tầng hiện tại
+chưa có kiểm tra tài khoản bị khóa/mất hiệu lực theo từng request, thu hồi access
+token hoặc xoay signing key; thay secret sẽ làm token ký bằng secret cũ mất hiệu lực.
+
+Test dùng secret công khai riêng trong `application-test.yml`; không dùng secret
+test cho môi trường khác. Test kiểm tra token ký thật, claims sai, hết hạn,
+sai chữ ký/thuật toán, role, stateless, ownership và CSRF của auth routes.
+Tham khảo [Spring Security JWT Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html).
 
 ### 12.2. Kiểm soát AI
 
