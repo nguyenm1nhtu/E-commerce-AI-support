@@ -10,6 +10,11 @@ spring:
     hibernate:
       ddl-auto: validate
 
+app:
+  auth:
+    jwt:
+      secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtMzItYnl0ZXMtbWluaW11bQ==
+
 management:
   health:
     redis:
