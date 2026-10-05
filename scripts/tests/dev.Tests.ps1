@@ -40,6 +40,13 @@ exit /b 23
     Port = $env:SERVER_PORT
     RedisNamespace = $env:REDIS_NAMESPACE
     RedisCacheTtl = $env:REDIS_CACHE_TTL
+    JwtSecret = $env:JWT_SECRET
+    JwtIssuer = $env:JWT_ISSUER
+    JwtAudience = $env:JWT_AUDIENCE
+    JwtTtl = $env:JWT_ACCESS_TOKEN_TTL
+    RefreshCookieSecure = $env:AUTH_REFRESH_COOKIE_SECURE
+    RefreshCookieSameSite = $env:AUTH_REFRESH_COOKIE_SAME_SITE
+    RefreshCookieMaxAge = $env:AUTH_REFRESH_COOKIE_MAX_AGE
     Directory = (Get-Location).Path
     Arguments = $args
     DockerStarted = Test-Path -LiteralPath (Join-Path $PSScriptRoot 'docker-calls.txt')
@@ -61,6 +68,13 @@ SERVER_PORT=8088 # comment
 REDIS_PASSWORD=ignored
 REDIS_NAMESPACE=dev-cache-test
 REDIS_CACHE_TTL=3m
+JWT_SECRET=fake-test-secret
+JWT_ISSUER=dev-issuer
+JWT_AUDIENCE=dev-api
+JWT_ACCESS_TOKEN_TTL=5m
+AUTH_REFRESH_COOKIE_SECURE=false
+AUTH_REFRESH_COOKIE_SAME_SITE=Strict
+AUTH_REFRESH_COOKIE_MAX_AGE=2d
 '@ | Set-Content -LiteralPath (Join-Path $fixture '.env.dev') -Encoding UTF8
     $result = Invoke-Dev
     Assert-True ($result.Code -eq 23) 'Maven exit code must propagate.'
@@ -68,6 +82,9 @@ REDIS_CACHE_TTL=3m
     Assert-True ($captured.Password -ceq 'fake$literal#with=equals') 'Password must remain literal.'
     Assert-True ($captured.Database -eq 'dev database' -and $captured.Port -eq '8088') 'Quotes and comments must be parsed.'
     Assert-True ($captured.RedisNamespace -eq 'dev-cache-test' -and $captured.RedisCacheTtl -eq '3m') 'Redis settings must reach Maven.'
+    Assert-True ($captured.JwtSecret -eq 'fake-test-secret' -and $captured.JwtIssuer -eq 'dev-issuer' -and $captured.JwtAudience -eq 'dev-api' -and $captured.JwtTtl -eq '5m') 'JWT settings must reach Maven.'
+    Assert-True (-not $result.Output.Contains('fake-test-secret')) 'Script must not print the JWT secret.'
+    Assert-True ($captured.RefreshCookieSecure -eq 'false' -and $captured.RefreshCookieSameSite -eq 'Strict' -and $captured.RefreshCookieMaxAge -eq '2d') 'Refresh cookie settings must reach Maven.'
     Assert-True ($captured.Directory -eq $fixture) 'Maven must run relative to the script directory.'
     Assert-True ($captured.DockerStarted) 'Docker must start before Maven.'
     Assert-True (($captured.Arguments -join '|') -eq 'spring-boot:run|-Dspring-boot.run.profiles=dev') 'Maven must receive the dev profile.'

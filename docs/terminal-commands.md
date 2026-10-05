@@ -17,7 +17,8 @@ khi chạy script; Docker Compose cần hỗ trợ `up --wait`.
 Script nạp `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`,
 `POSTGRES_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_NAMESPACE`,
 `REDIS_CACHE_TTL`, `SERVER_PORT`, `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`,
-`JWT_ACCESS_TOKEN_TTL` từ `.env.dev`,
+`JWT_ACCESS_TOKEN_TTL`, `AUTH_REFRESH_COOKIE_SECURE`,
+`AUTH_REFRESH_COOKIE_SAME_SITE`, `AUTH_REFRESH_COOKIE_MAX_AGE` từ `.env.dev`,
 rồi chạy `docker compose --env-file .env.dev -f compose.dev.yaml up -d --wait`.
 Sau khi PostgreSQL và Redis healthy, script chạy Maven Wrapper với profile `dev`.
 Nếu Docker Compose lỗi, script trả về mã lỗi và không chạy backend.
@@ -74,7 +75,54 @@ mới mỗi lần khởi động nếu muốn token đã cấp tiếp tục có 
 vào Git hay log. `.env.example` chỉ chứa tên biến, không chứa secret thật.
 Tùy chọn: `JWT_ISSUER=ai-commerce-support`, `JWT_AUDIENCE=ai-commerce-support-api`,
 `JWT_ACCESS_TOKEN_TTL=15m`. API hiện dùng Bearer JWT; HTTP Basic/form login đã bỏ.
-Chưa có endpoint đăng ký/đăng nhập để client tự lấy token.
+Đã có `/api/auth/register`, `/api/auth/login`, `/api/auth/refresh` và
+`/api/auth/logout`. Redis phải khả dụng để tạo, xoay vòng và thu hồi phiên.
+`AUTH_REFRESH_COOKIE_MAX_AGE=7d` là hạn tuyệt đối của phiên refresh;
+`AUTH_REFRESH_COOKIE_SAME_SITE=Lax`. Đặt `AUTH_REFRESH_COOKIE_SECURE=false` trong
+`.env.dev` khi dùng HTTP localhost; production luôn bật Secure và cần HTTPS.
+Các biến đã có trong `.env.example`; khi sao chép cho dev HTTP, đổi Secure thành false.
+
+### Gọi thử API auth bằng PowerShell
+
+Backend dev phải đang chạy. `WebRequestSession` giữ cookie; mỗi POST auth cần
+header CSRF lấy từ JSON của `/csrf`. Refresh token không nằm trong JSON.
+
+```powershell
+$authBaseUrl = 'http://localhost:8080/api/auth'
+$csrfInfo = Invoke-RestMethod "$authBaseUrl/csrf" -SessionVariable authCookies
+$authHeaders = @{ $csrfInfo.headerName = $csrfInfo.token }
+
+# Chỉ dùng tài khoản và mật khẩu ví dụ dưới đây cho dev.
+$registerBody = @{
+    email = 'customer@example.com'
+    password = 'dev-password-123'
+    firstName = 'Minh'
+    lastName = 'Nguyen'
+} | ConvertTo-Json
+$authResult = Invoke-RestMethod "$authBaseUrl/register" -Method Post `
+    -WebSession $authCookies -Headers $authHeaders -ContentType 'application/json' -Body $registerBody
+
+# Với tài khoản đã tồn tại, dùng login thay cho register.
+$loginBody = @{ email = 'customer@example.com'; password = 'dev-password-123' } | ConvertTo-Json
+$authResult = Invoke-RestMethod "$authBaseUrl/login" -Method Post `
+    -WebSession $authCookies -Headers $authHeaders -ContentType 'application/json' -Body $loginBody
+
+Invoke-RestMethod 'http://localhost:8080/api/orders' `
+    -Headers @{ Authorization = "Bearer $($authResult.accessToken)" }
+
+$authResult = Invoke-RestMethod "$authBaseUrl/refresh" -Method Post `
+    -WebSession $authCookies -Headers $authHeaders
+
+Invoke-RestMethod "$authBaseUrl/logout" -Method Post `
+    -WebSession $authCookies -Headers $authHeaders
+$authResult = $null
+```
+
+Không in/lưu access token hoặc cookie vào log/Git. Đăng xuất thu hồi phiên refresh
+hiện tại, không thu hồi ngay JWT đã cấp. API auth trả `403` nếu thiếu/sai CSRF,
+`401` khi sai credentials/refresh token, `409` khi email trùng và `503` khi kho
+xác thực không khả dụng. Frontend khác origin cần cấu hình CORS riêng; hiện API
+không cho phép CORS khác origin.
 
 DevTools tự khởi động lại backend sau khi code Java được biên dịch. Giữ lệnh trên chạy,
 rồi chạy `.\mvnw.cmd compile` ở terminal khác, hoặc dùng **Build Project** trong IDE.
@@ -105,6 +153,9 @@ try {
 và xóa cache không ảnh hưởng key auth. `CommerceRedisCacheTests` kiểm tra API
 payment/shipment/order items có cache hit, giữ kiểm tra quyền sở hữu, không cache lỗi `404`,
 có TTL và đọc lại dữ liệu sau eviction/hết hạn. Không truyền cổng Redis production vào test.
+`AuthRedisIntegrationTests` và `RefreshTokenRepositoryTests` kiểm tra đăng ký,
+đăng nhập, refresh, logout, TTL phiên, replay và request đồng thời bằng Redis thật.
+Các test này cũng được bật bởi `redis.integration.port`; không dùng dữ liệu dev/prod.
 `REDIS_NAMESPACE` và `REDIS_CACHE_TTL` có thể đặt trong `.env.dev` khi chạy
 `dev.ps1`; mặc định lần lượt là `ai-commerce-support` và `10m`.
 

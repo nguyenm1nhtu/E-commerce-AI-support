@@ -85,6 +85,37 @@ Khuyến nghị **modular monolith** để giữ độ thực tế của backend
 
 Quan hệ trong sơ đồ nguồn: UI gọi Spring Boot qua HTTPS; ứng dụng gọi LLM providers qua Model API, PostgreSQL qua JPA, pgvector qua VectorStore và Redis cho cache/rate limit. GitHub Actions build/test ứng dụng và deploy lên AWS ECS/EC2 + RDS.
 
+### 4.1. Cấu trúc mã nguồn đã triển khai
+
+Package gốc là `com.ecommerce.aicommercesupport`; chỉ đặt lớp khởi động
+`AiCommerceSupportApplication` trực tiếp tại đây. Code chia theo module trước,
+rồi theo trách nhiệm trong từng module:
+
+| Package | Trách nhiệm |
+| --- | --- |
+| `auth.config` | Security filter chains, cấu hình JWT và cookie |
+| `auth.controller` | Endpoint đăng ký, đăng nhập, refresh, logout và CSRF |
+| `auth.dto` | Request/response HTTP, bao gồm `CsrfResponse` |
+| `auth.exception` | Xử lý lỗi HTTP riêng cho module auth |
+| `auth.repository` | Kho phiên refresh token trong Redis |
+| `auth.security` | Xác minh claims access token |
+| `auth.service` | Nghiệp vụ xác thực, cấp token và thao tác cookie |
+| `user.entity`, `user.repository` | Tài khoản, role và truy cập database |
+| `order`, `payment`, `shipment` | Mỗi module có `entity`, `repository`, `dto`, `controller`, `service`; cấu hình cache riêng nằm trong `order.config` |
+| `common` | Thành phần dùng chung, chia thành `config`, `controller`, `dto`, `exception`, `redis`, `security` |
+
+`SecurityConfiguration` nằm trong `auth.config`; `AuthExceptionHandler` nằm
+trong `auth.exception`. `CurrentUserId` thuộc `common.security` vì nhiều module
+dùng chung để lấy UUID người gọi. Các kiểu kết quả nội bộ của service/repository
+vẫn có thể là nested record; DTO công khai qua HTTP nằm trong package `dto`.
+
+Test đặt dưới `src/test/java`, theo module và trách nhiệm tương ứng. Các test
+commerce kiểm tra phối hợp order/payment/shipment nằm trong module `order`,
+vì luồng truy cập bắt đầu từ đơn hàng. Cấu hình ứng dụng, Liquibase và Lua nằm
+lần lượt tại `src/main/resources/`, `db/changelog/` và `redis/auth/` bên trong
+resources. Script khởi chạy `dev.ps1` và Compose nằm ở thư mục gốc; test script
+nằm trong `scripts/tests/`.
+
 ## 5. Luồng nghiệp vụ chính
 
 ### 5.1. Runtime hỗ trợ khách hàng
@@ -162,8 +193,8 @@ không phải ràng buộc trong PDF):
   email làm tên và không tự gán tên giả. Database cho phép `NULL` để tương thích
   dữ liệu cũ, còn DTO đăng ký và validation của entity bắt buộc đủ hai trường.
 - Hiện đã có entity, repository, migration, DTO và hạ tầng phát hành/xác minh
-  JWT access token. Luồng API đăng ký/đăng nhập chưa được triển khai; các endpoint
-  auth bên dưới vẫn là thiết kế.
+  JWT access token. API đăng ký, đăng nhập, refresh và logout đã hoạt động;
+  chi tiết cookie, CSRF và kho phiên Redis ở mục 12.1.
 
 ### 6.2. API inventory
 
@@ -171,6 +202,8 @@ không phải ràng buộc trong PDF):
 | --- | --- | --- |
 | POST | `/api/auth/register` | Đăng ký |
 | POST | `/api/auth/login` | Đăng nhập JWT |
+| GET | `/api/auth/csrf` | Lấy token chống CSRF trước khi gọi POST auth |
+| POST | `/api/auth/logout` | Thu hồi phiên refresh hiện tại và xóa cookie |
 | POST | `/api/auth/refresh` | Cấp access token mới và xoay vòng refresh token qua cookie HttpOnly |
 | GET | `/api/orders` | Danh sách đơn của customer |
 | GET | `/api/orders/{id}` | Chi tiết đơn |
@@ -342,12 +375,12 @@ Không tự động hóa ở giai đoạn đầu:
 
 #### 12.1.1. Access token và refresh token
 
-| Loại token | Mục đích | Thời hạn dự kiến |
+| Loại token | Mục đích | Thời hạn mặc định |
 | --- | --- | --- |
-| Access token | JWT dùng để gọi API qua `Authorization: Bearer <accessToken>`; định danh người dùng bằng UUID và mang thông tin quyền cần thiết | Ngắn, mặc định dự kiến 15 phút |
-| Refresh token | Chuỗi ngẫu nhiên bí mật do backend quản lý, truyền qua cookie HttpOnly để xin access token mới; không dùng để gọi API nghiệp vụ | Dài hơn, mặc định dự kiến 7 ngày |
+| Access token | JWT dùng để gọi API qua `Authorization: Bearer <accessToken>`; định danh người dùng bằng UUID và mang thông tin quyền cần thiết | 15 phút |
+| Refresh token | Chuỗi ngẫu nhiên bí mật do backend quản lý, truyền qua cookie HttpOnly để xin access token mới; không dùng để gọi API nghiệp vụ | Phiên 7 ngày, không gia hạn khi xoay token |
 
-Thời hạn thực tế sẽ lấy từ cấu hình khi triển khai service, không cố định trong
+Thời hạn thực tế lấy từ cấu hình service, không cố định trong
 DTO. Đăng nhập vẫn dùng email và password; họ tên chỉ phục vụ thông tin hồ sơ
 và hiển thị trên UI.
 
@@ -367,7 +400,7 @@ token chỉ tồn tại trên server hoặc bị ẩn khỏi người dùng tron
 | `Path` | Cố định `/api/auth`; không đặt `Domain` để cookie chỉ thuộc host backend | Giới hạn cookie được gửi tới các đường dẫn auth phù hợp trên host backend |
 | `Max-Age` | Mặc định `7d` (604800 giây), cấu hình phải là số giây nguyên dương. Khi phát hành, không vượt thời hạn còn lại của refresh token; khi xóa dùng `0` | Giới hạn thời gian trình duyệt giữ cookie; backend vẫn phải kiểm tra hạn dùng token độc lập |
 
-Luồng dự kiến:
+Luồng đã triển khai:
 
 1. Sau khi đăng ký hoặc đăng nhập thành công, server trả body `AuthResponse`
    gồm `accessToken`, `tokenType` (giá trị `Bearer`), `expiresIn` (thời hạn còn
@@ -407,7 +440,7 @@ Trạng thái triển khai: `AuthResponse` đã bỏ `refreshToken` và `refresh
 chỉ chứa access token và thông tin công khai theo hợp đồng trên.
 
 Đã có `RefreshTokenCookieProperties` trong `auth/config` và bean
-`RefreshTokenCookieService` trong `auth/service` để chuẩn bị tích hợp API auth:
+`RefreshTokenCookieService` trong `auth/service`, đã tích hợp với API auth:
 
 - `write(response, token)` thêm header `Set-Cookie`, không ghi token vào body
   và không ghi đè các cookie khác. Cookie luôn có `HttpOnly`, `Path=/api/auth`,
@@ -427,11 +460,44 @@ chỉ chứa access token và thông tin công khai theo hợp đồng trên.
   Ứng dụng từ chối cấu hình `SameSite=None` nếu không bật `Secure`, tên cookie
   không hợp lệ, hoặc thời hạn không phải số giây nguyên dương.
 
-Chưa có API đăng ký/đăng nhập/refresh/logout, nơi lưu hash refresh token hay cơ
-chế xoay vòng/thu hồi. Đã có service cấp JWT và decoder xác minh access token
-(mục 12.1.3). Chưa phát hành cookie cho request thực tế cho đến khi API auth gọi
-helper. Filter chain auth giữ CSRF kể cả request có header Bearer; việc cấp CSRF
-token cho frontend và CORS theo origin cụ thể sẽ thực hiện cùng API auth.
+Đã triển khai `AuthController`, `AuthService`, `RefreshTokenService` và
+`RefreshTokenRepository`. Các endpoint:
+
+| Method | Endpoint | Kết quả |
+| --- | --- | --- |
+| GET | `/api/auth/csrf` | `200`, trả `headerName`, `token` và cookie CSRF HttpOnly |
+| POST | `/api/auth/register` | `201`, tạo user `CUSTOMER`, trả `AuthResponse` và cookie refresh |
+| POST | `/api/auth/login` | `200`, xác minh email/password, trả `AuthResponse` và cookie refresh |
+| POST | `/api/auth/refresh` | `200`, đọc cookie, xoay refresh token và trả access token mới; không cần body |
+| POST | `/api/auth/logout` | `204`, thu hồi phiên hiện tại và xóa cookie; gọi lại/thiếu cookie vẫn `204` |
+
+Đăng ký nhận `email`, `password`, `firstName`, `lastName`; không cho client chọn
+role. Email mới lưu dạng lowercase, bỏ khoảng trắng đầu/cuối; tra cứu email
+không phân biệt hoa/thường, tên được trim. Validation email ở HTTP vẫn yêu cầu
+email hợp lệ. Password đăng ký tối thiểu 8 ký tự, tối đa 72 byte UTF-8 theo
+giới hạn bcrypt; password không bị trim. Email trùng trả `409`, bao gồm đăng ký
+đồng thời bị unique constraint từ chối. Dữ liệu email cũ phải không có các tài
+khoản chỉ khác nhau ở chữ hoa/thường; luồng này không tự gộp tài khoản cũ.
+Sai mật khẩu hoặc email không tồn tại trả cùng lỗi `401`; vẫn kiểm tra hash giả
+khi không tìm thấy email. Redis không kết nối được/timeout trả `503`, không cấp
+token khi không lưu được phiên; đăng ký rollback user nếu ghi Redis thất bại.
+
+Client gọi `GET /api/auth/csrf`, giữ cookie `XSRF-TOKEN` và gửi giá trị `token`
+trong JSON qua header `X-XSRF-TOKEN` ở mọi POST auth. Token trả về đã được mask
+bởi Spring Security; không lấy giá trị cookie thô để thay thế. Cookie CSRF có
+`HttpOnly`, `Path=/api/auth`, cùng `Secure`/`SameSite` với cookie refresh và không
+tạo HTTP session. Thiếu/sai CSRF trả `403`, kể cả có Bearer header. Response auth
+có `Cache-Control: no-store` theo Spring Security và không dùng Spring Cache.
+Hiện hỗ trợ frontend cùng origin; chưa bật CORS cho origin khác. Cấu hình
+`SameSite=None` một mình không cấp quyền CORS.
+
+Mỗi lần đăng nhập tạo một phiên độc lập; đăng xuất chỉ thu hồi phiên từ cookie
+hiện tại. Refresh đọc lại user/role từ database; user bị xóa không thể refresh.
+Chưa có trạng thái khóa tài khoản trong entity. Access token đã phát hành vẫn
+còn hiệu lực đến khi hết hạn (decoder cho phép lệch đồng hồ 30 giây), kể cả sau
+logout hoặc phát hiện replay. Frontend cần xóa access token trong bộ nhớ khi logout
+và chỉ gửi một request refresh tại một thời điểm: hai request dùng cùng token
+sẽ được coi là replay và thu hồi cả phiên.
 
 #### 12.1.2. Redis cho refresh token và cache
 
@@ -501,10 +567,29 @@ hay toàn bộ `AuthResponse`.
 Hiện lỗi Redis được truyền lên; chưa có fallback cache hoặc cơ chế tiếp tục
 xác thực khi Redis không khả dụng.
 
-Chưa triển khai kho lưu refresh token, hash token, phát hiện dùng lại, xoay vòng
-hoặc thu hồi phiên. `RedisKeys` chỉ chuẩn hóa tên key, không tự hash hay xác minh
-token. Service auth sau này phải ghi metadata kèm TTL, xử lý xoay vòng nguyên tử
-và từ chối refresh nếu thiếu dữ liệu phiên. Không dùng Spring Cache làm kho auth.
+Kho refresh token dùng `StringRedisTemplate` và hai Lua script trong
+`src/main/resources/redis/auth/` để tạo/rotate nguyên tử trên Redis standalone:
+
+- Raw token là 32 byte ngẫu nhiên từ `SecureRandom`, mã hóa Base64 URL-safe
+  không padding; Redis chỉ nhận SHA-256 dạng hex, không lưu raw token/password.
+- `<namespace>:auth:refresh:<sha256-hex>` ánh xạ hash token tới UUID phiên.
+- `<namespace>:auth:session:<UUID>` là Redis hash chứa `userId`, `currentHash`.
+  `RedisKeys` tạo cả hai loại key; service thực hiện hash và xác minh token.
+- TTL phiên lấy từ `AUTH_REFRESH_COOKIE_MAX_AGE` (mặc định `7d`), là hạn tuyệt đối
+  tính từ đăng ký/đăng nhập, không gia hạn khi refresh. Token mới và cookie mới
+  chỉ sống bằng thời gian còn lại; dưới một giây còn lại thì từ chối refresh.
+- Giữ index của token đã dùng đến hết hạn phiên để phát hiện replay. Khi token
+  cũ được gửi lại, script xóa key phiên; mọi token trong phiên đó mất hiệu lực.
+  Logout cũng xóa key phiên, kể cả khi cookie là token cũ đã xoay. Các index
+  còn lại tự hết TTL; không cần quét/xóa toàn bộ Redis.
+- Thiếu/hết hạn key token hoặc key phiên trả `401`. Không fallback xác thực
+  khi Redis mất dữ liệu. Script dùng nhiều key; chưa hỗ trợ Redis Cluster.
+
+Test `RefreshTokenRepositoryTests` và `AuthRedisIntegrationTests` chạy với
+`-Dredis.integration.port=<port>`, kiểm tra Redis thật: TTL, xoay vòng, replay,
+hai request đồng thời, cách ly phiên/cache, user bị xóa và đầy đủ luồng HTTP.
+Suite mặc định mock repository Redis trong test API và có test CSRF cookie thật,
+không yêu cầu Redis đang chạy. Không dùng Spring Cache làm kho auth.
 Prefix chỉ tách tên key, không tách tài nguyên hoặc quyền truy cập; không dùng
 `FLUSHDB`/`FLUSHALL` để xóa cache trên Redis đang giữ phiên. Nếu cần chính sách
 eviction riêng cho cache, tách Redis instance để tránh loại bỏ dữ liệu phiên.
@@ -522,7 +607,8 @@ và [Spring Data Redis Cache](https://docs.spring.io/spring-data/redis/reference
 `JwtService.generateAccessToken(userId, role)` trả đối tượng `Jwt`: lấy chuỗi
 bằng `getTokenValue()` và hạn dùng bằng `getExpiresAt()`. Chỉ gọi sau khi đã xác
 thực user; role phải lấy từ dữ liệu server, không nhận từ request đăng ký.
-Service này chưa được công khai thành endpoint cấp token.
+`AuthService` gọi service này sau đăng ký/đăng nhập hoặc xác minh refresh token;
+không có endpoint cho client tự gửi user ID/role để xin JWT.
 
 | Cấu hình | Giá trị / quy tắc |
 | --- | --- |
@@ -542,9 +628,9 @@ kiểm tra ownership trên từng order. Access token không chứa password, em
 hoặc refresh token. `JwtProperties.toString()` che secret.
 
 `/api/auth/**` có filter chain riêng, giữ CSRF và không miễn CSRF chỉ vì có
-Bearer header. Các POST register/login/refresh/logout đã được khai báo permit
-để chuẩn bị controller; chưa có controller nên chưa thực hiện đăng ký/đăng nhập.
-Client cần luồng lấy CSRF token khi các API này được triển khai. Hạ tầng hiện tại
+Bearer header. Các POST register/login/refresh/logout cho phép truy cập không có
+access token nhưng bắt buộc CSRF; `GET /api/auth/csrf` cấp token cho client.
+Hạ tầng hiện tại
 chưa có kiểm tra tài khoản bị khóa/mất hiệu lực theo từng request, thu hồi access
 token hoặc xoay signing key; thay secret sẽ làm token ký bằng secret cũ mất hiệu lực.
 
