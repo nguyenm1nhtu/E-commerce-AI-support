@@ -1,5 +1,7 @@
 package com.ecommerce.aicommercesupport.common.config;
 
+import java.util.List;
+
 import com.ecommerce.aicommercesupport.common.dto.ApiErrorResponse;
 import io.swagger.v3.core.converter.ModelConverters;
 import io.swagger.v3.oas.models.Components;
@@ -22,11 +24,10 @@ public class OpenApiConfiguration {
     public OpenAPI commerceOpenApi() {
         return new OpenAPI()
                 .info(new Info().title("Commerce Support API").version("v1")
-                        .description("Customer order read API. Authorize with HTTP Basic: the username must be "
-                                + "the UUID stored in orders.user_id. JWT authentication is not implemented yet."))
-                .components(new Components().addSecuritySchemes("basicAuth",
-                        new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("basic")))
-                .addSecurityItem(new SecurityRequirement().addList("basicAuth"));
+                        .description("Customer order read API. Authorize with a Bearer JWT whose subject is the user UUID."))
+                .components(new Components().addSecuritySchemes("bearerAuth",
+                        new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT")))
+                .addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
     }
 
     @Bean
@@ -37,12 +38,28 @@ public class OpenApiConfiguration {
             if (openApi.getPaths() == null) {
                 return;
             }
-            openApi.getPaths().values().forEach(path -> path.readOperations().forEach(operation -> {
+            openApi.getPaths().forEach((pathName, path) -> path.readOperations().forEach(operation -> {
+                if (pathName.startsWith("/api/auth/")) {
+                    operation.setSecurity(List.of());
+                    if (!pathName.endsWith("/csrf")) {
+                        operation.addParametersItem(new io.swagger.v3.oas.models.parameters.HeaderParameter()
+                                .name("X-XSRF-TOKEN").required(true)
+                                .description("Masked token returned by GET /api/auth/csrf; send the CSRF cookie too")
+                                .schema(new Schema<String>().type("string")));
+                    }
+                    operation.getResponses().addApiResponse("503", errorResponse("Authentication storage unavailable"));
+                    if (pathName.endsWith("/register")) {
+                        operation.getResponses().addApiResponse("409", errorResponse("Email already registered"));
+                    }
+                }
                 operation.getResponses().addApiResponse("400", errorResponse("Invalid request"));
-                operation.getResponses().addApiResponse("401",
-                        new ApiResponse().description("Authentication required (Spring Security)"));
+                operation.getResponses().addApiResponse("401", pathName.startsWith("/api/auth/")
+                        ? errorResponse("Invalid credentials or refresh token")
+                        : new ApiResponse().description("Authentication required (Spring Security)"));
                 operation.getResponses().addApiResponse("403", errorResponse("Invalid user identity or access denied"));
-                operation.getResponses().addApiResponse("404", errorResponse("Resource not found or not owned by user"));
+                if (!pathName.startsWith("/api/auth/")) {
+                    operation.getResponses().addApiResponse("404", errorResponse("Resource not found or not owned by user"));
+                }
                 operation.getResponses().addApiResponse("500", errorResponse("Unexpected server error"));
             }));
         };

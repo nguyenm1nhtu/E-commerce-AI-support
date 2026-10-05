@@ -3,6 +3,7 @@ package com.ecommerce.aicommercesupport.auth.dto;
 import java.util.UUID;
 
 import com.ecommerce.aicommercesupport.user.entity.UserRole;
+import jakarta.validation.constraints.NotNull;
 
 public record AuthResponse(
         String accessToken,
