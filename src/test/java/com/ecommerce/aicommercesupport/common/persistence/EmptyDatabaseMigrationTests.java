@@ -75,15 +75,15 @@ class EmptyDatabaseMigrationTests {
         assertThat(jdbc.queryForList(tableQuery, String.class).stream()
                 .map(name -> name.toLowerCase(Locale.ROOT)).toList())
                 .containsExactlyInAnyOrder("orders", "order_items", "payments", "shipments", "users",
-                        "databasechangelog", "databasechangeloglock");
+                        "tickets", "ticket_messages", "databasechangelog", "databasechangeloglock");
         var expectedIds = postgres
                 ? new String[] {"001-enable-pgvector", "002-create-commerce-tables", "003-constrain-shipment-carrier",
-                        "004-create-users-table", "005-add-user-names"}
+                        "004-create-users-table", "005-add-user-names", "006-create-ticketing-tables"}
                 : new String[] {"002-create-commerce-tables", "003-constrain-shipment-carrier",
-                        "004-create-users-table", "005-add-user-names"};
+                        "004-create-users-table", "005-add-user-names", "006-create-ticketing-tables"};
         assertThat(jdbc.queryForList("SELECT id FROM databasechangelog", String.class))
                 .containsExactlyInAnyOrder(expectedIds);
-        for (var table : new String[] {"orders", "order_items", "payments", "shipments", "users"}) {
+        for (var table : new String[] {"orders", "order_items", "payments", "shipments", "users", "tickets", "ticket_messages"}) {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Long.class)).isZero();
         }
         if (postgres) {
