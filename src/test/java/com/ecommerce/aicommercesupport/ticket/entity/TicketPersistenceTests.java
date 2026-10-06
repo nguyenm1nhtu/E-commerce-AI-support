@@ -37,7 +37,7 @@ class TicketPersistenceTests {
     void persistsTicketAssignmentMessagesAndTimestampsWithLazyRelationship() {
         var customer = persistUser(UserRole.CUSTOMER);
         var agent = persistUser(UserRole.SUPPORT_AGENT);
-        var ticket = new Ticket(customer.getId(), "SHIPMENT", TicketStatus.HUMAN_HANDLING,
+        var ticket = new Ticket(customer.getId(), TicketCategory.SHIPMENT, TicketStatus.HUMAN_HANDLING,
                 TicketPriority.HIGH, agent.getId(), CREATED_AT);
         entityManager.persist(ticket);
         var message = new TicketMessage(ticket, TicketSenderType.CUSTOMER, "Đơn hàng của tôi đang ở đâu?", CREATED_AT);
@@ -59,7 +59,7 @@ class TicketPersistenceTests {
         var loadedTicket = entityManager.find(Ticket.class, ticket.getId());
         assertThat(loadedTicket.getUserId()).isEqualTo(customer.getId());
         assertThat(loadedTicket.getAssignedTo()).isEqualTo(agent.getId());
-        assertThat(loadedTicket.getCategory()).isEqualTo("SHIPMENT");
+        assertThat(loadedTicket.getCategory()).isEqualTo(TicketCategory.SHIPMENT);
         assertThat(loadedTicket.getStatus()).isEqualTo(TicketStatus.HUMAN_HANDLING);
         assertThat(loadedTicket.getPriority()).isEqualTo(TicketPriority.HIGH);
         assertThat(loadedTicket.getCreatedAt()).isEqualTo(CREATED_AT);
@@ -70,7 +70,7 @@ class TicketPersistenceTests {
     void persistsEveryEnumValueAsStringAndAllowsUnassignedTicket() {
         var customer = persistUser(UserRole.CUSTOMER);
         for (var status : TicketStatus.values()) {
-            var ticket = new Ticket(customer.getId(), "ORDER", status, TicketPriority.NORMAL, null, CREATED_AT);
+            var ticket = new Ticket(customer.getId(), TicketCategory.ORDER, status, TicketPriority.NORMAL, null, CREATED_AT);
             entityManager.persist(ticket);
             entityManager.flush();
             assertThat(jdbc.queryForObject("SELECT status FROM tickets WHERE id = ?", String.class, ticket.getId()))
@@ -78,6 +78,12 @@ class TicketPersistenceTests {
             assertThat(ticket.getAssignedTo()).isNull();
         }
         var ticket = persistTicket(customer.getId());
+        for (var category : TicketCategory.values()) {
+            ticket.setCategory(category);
+            entityManager.flush();
+            assertThat(jdbc.queryForObject("SELECT category FROM tickets WHERE id = ?", String.class, ticket.getId()))
+                    .isEqualTo(category.name());
+        }
         for (var priority : TicketPriority.values()) {
             ticket.setPriority(priority);
             entityManager.flush();
@@ -95,12 +101,12 @@ class TicketPersistenceTests {
 
     @Test
     void validatesRequiredFieldsAndTextLimits() {
-        assertThat(validator.validate(new Ticket(null, " ", null, null, null, null)))
+        assertThat(validator.validate(new Ticket(null, null, null, null, null, null)))
                 .extracting(violation -> violation.getPropertyPath().toString())
                 .containsExactlyInAnyOrder("userId", "category", "status", "priority", "createdAt");
-        var ticket = new Ticket(UUID.randomUUID(), "a".repeat(64), TicketStatus.OPEN, TicketPriority.NORMAL, null, CREATED_AT);
+        var ticket = new Ticket(UUID.randomUUID(), TicketCategory.ORDER, TicketStatus.OPEN, TicketPriority.NORMAL, null, CREATED_AT);
         assertThat(validator.validate(ticket)).isEmpty();
-        ticket.setCategory("a".repeat(65));
+        ticket.setCategory(null);
         assertThat(validator.validate(ticket)).extracting(violation -> violation.getPropertyPath().toString()).contains("category");
         assertThat(validator.validate(new TicketMessage(null, null, " ", null)))
                 .extracting(violation -> violation.getPropertyPath().toString())
@@ -118,6 +124,8 @@ class TicketPersistenceTests {
         assertInvalidTicket(userId, "ORDER", "OPEN", "NORMAL", UUID.randomUUID(), CREATED_AT);
         assertInvalidTicket(userId, null, "OPEN", "NORMAL", null, CREATED_AT);
         assertInvalidTicket(userId, " ", "OPEN", "NORMAL", null, CREATED_AT);
+        assertInvalidTicket(userId, "CUSTOM_CATEGORY", "OPEN", "NORMAL", null, CREATED_AT);
+        assertInvalidTicket(userId, "order", "OPEN", "NORMAL", null, CREATED_AT);
         assertInvalidTicket(userId, "a".repeat(65), "OPEN", "NORMAL", null, CREATED_AT);
         assertInvalidTicket(userId, "ORDER", "UNKNOWN", "NORMAL", null, CREATED_AT);
         assertInvalidTicket(userId, "ORDER", null, "NORMAL", null, CREATED_AT);
@@ -154,7 +162,7 @@ class TicketPersistenceTests {
     }
 
     private Ticket persistTicket(UUID userId) {
-        var ticket = new Ticket(userId, "ORDER", TicketStatus.OPEN, TicketPriority.NORMAL, null, CREATED_AT);
+        var ticket = new Ticket(userId, TicketCategory.ORDER, TicketStatus.OPEN, TicketPriority.NORMAL, null, CREATED_AT);
         entityManager.persist(ticket);
         entityManager.flush();
         return ticket;

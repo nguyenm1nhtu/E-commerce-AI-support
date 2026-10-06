@@ -3,6 +3,8 @@ package com.ecommerce.aicommercesupport.ticket.repository;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.ecommerce.aicommercesupport.ticket.entity.TicketCategory;
+
 import com.ecommerce.aicommercesupport.ticket.entity.Ticket;
 import com.ecommerce.aicommercesupport.ticket.entity.TicketPriority;
 import com.ecommerce.aicommercesupport.ticket.entity.TicketStatus;
@@ -93,7 +95,7 @@ class TicketRepositoryTests {
     }
 
     private Ticket saveTicket(UUID owner, TicketStatus status, UUID assignedTo, long seconds) {
-        return tickets.saveAndFlush(new Ticket(owner, "ORDER", status, TicketPriority.NORMAL, assignedTo,
+        return tickets.saveAndFlush(new Ticket(owner, TicketCategory.ORDER, status, TicketPriority.NORMAL, assignedTo,
                 Instant.parse("2026-10-05T00:00:00Z").plusSeconds(seconds)));
     }
 }

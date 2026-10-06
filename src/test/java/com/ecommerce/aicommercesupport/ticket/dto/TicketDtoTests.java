@@ -3,6 +3,8 @@ package com.ecommerce.aicommercesupport.ticket.dto;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.ecommerce.aicommercesupport.ticket.entity.TicketCategory;
+
 import com.ecommerce.aicommercesupport.ticket.entity.TicketPriority;
 import com.ecommerce.aicommercesupport.ticket.entity.TicketSenderType;
 import com.ecommerce.aicommercesupport.ticket.entity.TicketStatus;
@@ -16,13 +18,14 @@ class TicketDtoTests {
     @Test
     void roundTripsTicketIncludingEnumsUuidTimestampAndNullableAssignee() {
         var mapper = JsonMapper.builder().build();
-        var dto = new TicketDto(UUID.randomUUID(), UUID.randomUUID(), "ORDER", TicketStatus.OPEN,
+        var dto = new TicketDto(UUID.randomUUID(), UUID.randomUUID(), TicketCategory.ORDER, TicketStatus.OPEN,
                 TicketPriority.NORMAL, null, Instant.parse("2026-10-05T00:00:00Z"));
         var json = mapper.writeValueAsString(dto);
 
         assertThat(mapper.readValue(json, TicketDto.class)).isEqualTo(dto);
         var tree = mapper.readTree(json);
         assertThat(tree.size()).isEqualTo(7);
+        assertThat(tree.get("category").asText()).isEqualTo("ORDER");
         assertThat(tree.get("status").asText()).isEqualTo("OPEN");
         assertThat(tree.get("priority").asText()).isEqualTo("NORMAL");
         assertThat(tree.get("assignedTo").isNull()).isTrue();

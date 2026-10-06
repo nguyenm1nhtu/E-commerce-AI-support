@@ -5,15 +5,18 @@ import java.util.UUID;
 
 import javax.sql.DataSource;
 
+import liquibase.exception.LiquibaseException;
 import liquibase.integration.spring.SpringLiquibase;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.core.io.DefaultResourceLoader;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class EmptyDatabaseMigrationTests {
 
@@ -63,6 +66,42 @@ class EmptyDatabaseMigrationTests {
         }
     }
 
+    @Test
+    void constrainsExistingTicketCategoriesWithoutChangingValidData() throws Exception {
+        try (var dataSource = existingTicketDatabase("SHIPMENT")) {
+            migrate(dataSource);
+            var jdbc = new JdbcTemplate(dataSource);
+            assertThat(jdbc.queryForObject("SELECT category FROM tickets", String.class)).isEqualTo("SHIPMENT");
+            assertThatThrownBy(() -> jdbc.update("UPDATE tickets SET category = 'UNSUPPORTED'"))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+            migrate(dataSource);
+        }
+    }
+
+    @Test
+    void stopsCategoryMigrationOnUnsupportedExistingDataWithoutSilentlyReclassifyingIt() throws Exception {
+        try (var dataSource = existingTicketDatabase("LEGACY_CATEGORY")) {
+            assertThatThrownBy(() -> migrate(dataSource)).isInstanceOf(LiquibaseException.class);
+            var jdbc = new JdbcTemplate(dataSource);
+            assertThat(jdbc.queryForObject("SELECT category FROM tickets", String.class)).isEqualTo("LEGACY_CATEGORY");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM databasechangelog WHERE id = '007-constrain-ticket-category'", Long.class))
+                    .isZero();
+        }
+    }
+
+    private SingleConnectionDataSource existingTicketDatabase(String category) throws Exception {
+        var dataSource = new SingleConnectionDataSource("jdbc:h2:mem:ticket_category_" + UUID.randomUUID(), "sa", "", true);
+        migrate(dataSource, "classpath:db/changelog/changes/004-create-users-table.sql");
+        migrate(dataSource, "classpath:db/changelog/changes/006-create-ticketing-tables.sql");
+        var jdbc = new JdbcTemplate(dataSource);
+        var userId = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)",
+                userId, "ticket@example.com", "encoded-password", "CUSTOMER");
+        jdbc.update("INSERT INTO tickets (id, user_id, category, status, priority, created_at) VALUES (?, ?, ?, 'OPEN', 'NORMAL', CURRENT_TIMESTAMP)",
+                UUID.randomUUID(), userId, category);
+        return dataSource;
+    }
+
     private void verifyMigration(DataSource dataSource, boolean postgres) throws Exception {
         var jdbc = new JdbcTemplate(dataSource);
         var tableQuery = "SELECT table_name FROM information_schema.tables WHERE LOWER(table_schema) = 'public'";
@@ -78,9 +117,9 @@ class EmptyDatabaseMigrationTests {
                         "tickets", "ticket_messages", "databasechangelog", "databasechangeloglock");
         var expectedIds = postgres
                 ? new String[] {"001-enable-pgvector", "002-create-commerce-tables", "003-constrain-shipment-carrier",
-                        "004-create-users-table", "005-add-user-names", "006-create-ticketing-tables"}
+                        "004-create-users-table", "005-add-user-names", "006-create-ticketing-tables", "007-constrain-ticket-category"}
                 : new String[] {"002-create-commerce-tables", "003-constrain-shipment-carrier",
-                        "004-create-users-table", "005-add-user-names", "006-create-ticketing-tables"};
+                        "004-create-users-table", "005-add-user-names", "006-create-ticketing-tables", "007-constrain-ticket-category"};
         assertThat(jdbc.queryForList("SELECT id FROM databasechangelog", String.class))
                 .containsExactlyInAnyOrder(expectedIds);
         for (var table : new String[] {"orders", "order_items", "payments", "shipments", "users", "tickets", "ticket_messages"}) {
@@ -100,9 +139,13 @@ class EmptyDatabaseMigrationTests {
     }
 
     private void migrate(DataSource dataSource) throws Exception {
+        migrate(dataSource, "classpath:db/changelog/db.changelog-master.yaml");
+    }
+
+    private void migrate(DataSource dataSource, String changeLog) throws Exception {
         var liquibase = new SpringLiquibase();
         liquibase.setDataSource(dataSource);
-        liquibase.setChangeLog("classpath:db/changelog/db.changelog-master.yaml");
+        liquibase.setChangeLog(changeLog);
         liquibase.setResourceLoader(new DefaultResourceLoader());
         liquibase.afterPropertiesSet();
     }

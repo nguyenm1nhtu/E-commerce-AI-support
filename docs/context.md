@@ -198,13 +198,13 @@ không phải ràng buộc trong PDF):
 
 #### Ghi chú triển khai entity ticketing
 
-Đã có `Ticket`, `TicketMessage`, `TicketStatus`, `TicketPriority` và
+Đã có `Ticket`, `TicketMessage`, `TicketCategory`, `TicketStatus`, `TicketPriority` và
 `TicketSenderType` trong `ticket/entity`. Migration
 `006-create-ticketing-tables.sql` tạo bảng `tickets`, `ticket_messages` và được
 include từ master changelog; Hibernate tiếp tục dùng `ddl-auto: validate`.
 
-- `Ticket`: UUID tự sinh, `userId` bắt buộc, `category` không rỗng và tối đa
-  64 ký tự, `status`, `priority`, `assignedTo` nullable và `createdAt` bắt buộc.
+- `Ticket`: UUID tự sinh, `userId` bắt buộc, `category` là `TicketCategory` bắt
+  buộc, `status`, `priority`, `assignedTo` nullable và `createdAt` bắt buộc.
   `createdAt` là bổ sung triển khai để phục vụ sắp xếp danh sách/hàng đợi;
   caller truyền thời gian và không sửa thời gian tạo sau khi lưu.
 - `TicketStatus`: `OPEN`, `AI_HANDLING`, `WAITING_CUSTOMER`, `ESCALATED`,
@@ -214,13 +214,15 @@ include từ master changelog; Hibernate tiếp tục dùng `ddl-auto: validate`
 - `TicketMessage`: UUID tự sinh, quan hệ `ManyToOne LAZY` tới `Ticket`,
   `senderType`, `content` không rỗng (tối đa 10.000 ký tự) và `createdAt` bắt buộc.
   `TicketSenderType` gồm `CUSTOMER`, `SUPPORT_AGENT`, `AI`, `SYSTEM`.
-- `category` dùng chuỗi vì nguồn chưa định nghĩa danh sách loại ticket; các giá
-  trị như `ORDER`, `SHIPMENT` trong test chỉ là ví dụ, chưa phải enum/allowlist.
+- `TicketCategory` gồm `ORDER`, `PAYMENT`, `SHIPMENT`, `RETURN`, `REFUND`, `OTHER`.
+  Đây là danh sách được chốt trong quá trình triển khai. Entity lưu tên enum
+  bằng `EnumType.STRING` trong cột `VARCHAR(64)` hiện có; request/response dùng
+  enum và JSON vẫn là chuỗi, ví dụ `"category": "SHIPMENT"`.
 - Database có foreign key từ `userId`/`assignedTo` tới `users.id` và từ message
   tới ticket, CHECK constraint cho enum và chuỗi rỗng, cùng index cho danh sách
   ticket theo user/trạng thái/người phụ trách và message theo ticket/thời gian.
   Không cascade xóa user, ticket hoặc hội thoại.
-- Đã có entity/schema, repository và DTO; chưa có service hay API ticket.
+- Đã có entity/schema, repository, DTO và service tạo ticket; API ticket chưa hoàn tất.
   Kiểm tra ownership, role người được phân công/người gửi, xác định danh tính
   người gửi và quy tắc chuyển trạng thái sẽ được thực hiện ở luồng nghiệp vụ;
   enum và foreign key không tự thực hiện các kiểm tra quyền đó.
@@ -228,6 +230,28 @@ include từ master changelog; Hibernate tiếp tục dùng `ddl-auto: validate`
 `TicketPersistenceTests` kiểm tra lưu/đọc quan hệ, UUID, timestamp, enum dạng
 chuỗi, validation và ràng buộc database. Test migration database rỗng cũng
 kiểm tra hai bảng mới và việc chạy lại changelog không tạo trùng changeset.
+
+Migration mới `007-constrain-ticket-category.sql` thêm CHECK constraint cho sáu
+category trên, không sửa changeset `006` đã tồn tại. Khi nâng cấp, dữ liệu đã có
+category hợp lệ được giữ nguyên. Nếu có giá trị khác, migration dừng; cần phân
+loại lại dữ liệu theo nghiệp vụ trước khi chạy lại, không tự chuyển sang `OTHER`.
+Rollback changeset `007` chỉ bỏ constraint mới.
+
+Frontend nên dùng dropdown và gửi mã enum chính xác, không gửi nhãn tiếng Việt:
+
+| Mã category | Nhãn gợi ý |
+| --- | --- |
+| `ORDER` | Đơn hàng |
+| `PAYMENT` | Thanh toán |
+| `SHIPMENT` | Vận chuyển |
+| `RETURN` | Trả hàng |
+| `REFUND` | Hoàn tiền |
+| `OTHER` | Khác |
+
+`CreateTicketRequest` yêu cầu category khác `null`; giá trị chuỗi ngoài enum
+hoặc sai chữ hoa/thường bị từ chối khi đọc JSON. Frontend có thể chọn sẵn category
+theo màn hình/ngữ cảnh nhưng backend vẫn xác minh giá trị. Chưa có endpoint danh
+sách category; bảng này mô tả hợp đồng dữ liệu cho frontend sau này.
 
 #### Repository và DTO ticketing
 
@@ -253,17 +277,46 @@ tự công khai entity thành API.
 | --- | --- |
 | `TicketDto` | `id`, `userId`, `category`, `status`, `priority`, `assignedTo`, `createdAt` |
 | `TicketMessageDto` | `id`, `ticketId`, `senderType`, `content`, `createdAt`; không nhúng entity JPA |
-| `CreateTicketRequest` | `category` không rỗng, tối đa 64 ký tự; `content` là nội dung message đầu tiên, không rỗng, tối đa 10.000 ký tự |
+| `CreateTicketRequest` | `category` là `TicketCategory` bắt buộc; `content` là nội dung message đầu tiên, không rỗng, tối đa 10.000 ký tự |
 | `CreateTicketMessageRequest` | Chỉ có `content` không rỗng, tối đa 10.000 ký tự |
 
 Request không nhận `userId`, `senderType`, trạng thái, độ ưu tiên, assignee hoặc
-timestamp từ client. Service sẽ lấy danh tính từ authentication, tự xác định
-loại người gửi và các giá trị quản lý; việc lưu ticket cùng message đầu tiên
-cần nằm trong một transaction. Đây là hợp đồng DTO, chưa có endpoint thực thi.
+timestamp từ client. `TicketService.createTicket(userId, request)` kiểm tra UUID
+khác `null`, request khác `null` và chạy Bean Validation ngay trong service.
+Service đọc user từ database, yêu cầu tài khoản tồn tại và role hiện tại là
+`CUSTOMER`, tạo ticket `OPEN`, priority `NORMAL`, chưa phân công, rồi lưu message
+đầu tiên loại `CUSTOMER` từ `request.content()`. Ticket và message dùng cùng mốc
+thời gian tạo, nằm trong một transaction; lỗi lưu message rollback cả ticket,
+kể cả ticket đã flush. Service trả `TicketDto` của ticket vừa lưu.
+Controller sau này phải lấy `userId` từ authentication, không nhận UUID chủ sở
+hữu từ body. Service nhận UUID do caller tin cậy truyền vào; nó không tự đối
+chiếu UUID đó với SecurityContext. Chưa có endpoint thực thi.
+
+Các lỗi của luồng tạo ticket được phân biệt như sau (HTTP status do exception
+handler hiện có ánh xạ khi service được gọi từ controller):
+
+| Trường hợp | Kết quả |
+| --- | --- |
+| `userId` là `null` | `AuthenticationCredentialsNotFoundException`, `401` |
+| Request là `null`, thiếu category, nội dung rỗng/trắng hoặc vượt 10.000 ký tự | `400`, từ chối trước khi truy vấn/ghi database |
+| User không còn tồn tại | `ResourceNotFoundException`, `404` |
+| User không có role `CUSTOMER` | `AccessDeniedException`, `403`, không ghi ticket/message |
+| User bị xóa sau khi đọc, vi phạm foreign key `fk_tickets_user` lúc lưu | `409`, rollback |
+| Repository báo mất kết nối/tài nguyên database hoặc timeout trong method | `503`, thông báo chung, rollback |
+| Lỗi ràng buộc khác không dự kiến | Giữ exception gốc; handler trả `500` chung, rollback |
+
+Không catch mọi exception để trả thành công hoặc quy mọi lỗi database thành lỗi
+đầu vào. Lỗi phát sinh khi mở/commit transaction ngoài thân method vẫn do Spring
+và handler lỗi chung xử lý. Service flush cả ticket và message trong transaction
+để phát hiện lỗi ghi trước khi trả DTO; flush không thay thế commit.
 Không thêm cache cho repository/DTO này.
 
 Test kiểm tra phân trang, filter, cách ly user/ticket/assignee, repository không
 được export thành REST, validation biên độ dài và JSON round-trip của DTO.
+Test service kiểm tra identity/request không hợp lệ, user không tồn tại, role
+không được phép, giới hạn nội dung, lỗi repository và race xóa user. Test tích
+hợp kiểm tra lưu đủ ticket/message và rollback ticket đã flush khi ghi message
+thất bại, kể cả khi lỗi database được chuyển thành `503`.
 
 ### 6.2. API inventory
 

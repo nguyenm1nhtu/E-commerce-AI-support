@@ -3,6 +3,8 @@ package com.ecommerce.aicommercesupport.ticket.repository;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.ecommerce.aicommercesupport.ticket.entity.TicketCategory;
+
 import com.ecommerce.aicommercesupport.ticket.entity.Ticket;
 import com.ecommerce.aicommercesupport.ticket.entity.TicketMessage;
 import com.ecommerce.aicommercesupport.ticket.entity.TicketPriority;
@@ -38,8 +40,8 @@ class TicketMessageRepositoryTests {
         var owner = users.saveAndFlush(new User(UUID.randomUUID() + "@example.com", "encoded-password",
                 UserRole.CUSTOMER, "Minh", "Nguyen")).getId();
         var timestamp = Instant.parse("2026-10-05T00:00:00Z");
-        var ticket = tickets.saveAndFlush(new Ticket(owner, "ORDER", TicketStatus.OPEN, TicketPriority.NORMAL, null, timestamp));
-        var otherTicket = tickets.saveAndFlush(new Ticket(owner, "PAYMENT", TicketStatus.OPEN, TicketPriority.NORMAL, null, timestamp));
+        var ticket = tickets.saveAndFlush(new Ticket(owner, TicketCategory.ORDER, TicketStatus.OPEN, TicketPriority.NORMAL, null, timestamp));
+        var otherTicket = tickets.saveAndFlush(new Ticket(owner, TicketCategory.PAYMENT, TicketStatus.OPEN, TicketPriority.NORMAL, null, timestamp));
         var first = messages.saveAndFlush(new TicketMessage(ticket, TicketSenderType.CUSTOMER, "Question", timestamp));
         var second = messages.saveAndFlush(new TicketMessage(ticket, TicketSenderType.AI, "Answer", timestamp.plusSeconds(1)));
         messages.saveAndFlush(new TicketMessage(otherTicket, TicketSenderType.CUSTOMER, "Other conversation", timestamp));

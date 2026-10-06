@@ -53,7 +53,6 @@ public class AuthService {
             user = users.saveAndFlush(new User(email, passwords.encode(request.password()), UserRole.CUSTOMER,
                     request.firstName().strip(), request.lastName().strip()));
         } catch (DataIntegrityViolationException exception) {
-            // The unique email constraint also protects concurrent registrations of the same normalized email.
             if (exception.getMostSpecificCause().getMessage() != null
                     && exception.getMostSpecificCause().getMessage().toLowerCase(Locale.ROOT).contains("uq_users_email")) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");

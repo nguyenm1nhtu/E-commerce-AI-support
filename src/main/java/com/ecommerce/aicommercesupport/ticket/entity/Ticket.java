@@ -11,9 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -35,10 +33,10 @@ public class Ticket {
     @Column(nullable = false)
     private UUID userId;
 
-    @NotBlank
-    @Size(max = 64)
+    @NotNull
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 64)
-    private String category;
+    private TicketCategory category;
 
     @NotNull
     @Enumerated(EnumType.STRING)
@@ -58,7 +56,7 @@ public class Ticket {
     @Setter(AccessLevel.NONE)
     private Instant createdAt;
 
-    public Ticket(UUID userId, String category, TicketStatus status, TicketPriority priority,
+    public Ticket(UUID userId, TicketCategory category, TicketStatus status, TicketPriority priority,
             UUID assignedTo, Instant createdAt) {
         this.userId = userId;
         this.category = category;
