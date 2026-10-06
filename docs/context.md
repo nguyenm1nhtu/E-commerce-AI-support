@@ -196,6 +196,75 @@ không phải ràng buộc trong PDF):
   JWT access token. API đăng ký, đăng nhập, refresh và logout đã hoạt động;
   chi tiết cookie, CSRF và kho phiên Redis ở mục 12.1.
 
+#### Ghi chú triển khai entity ticketing
+
+Đã có `Ticket`, `TicketMessage`, `TicketStatus`, `TicketPriority` và
+`TicketSenderType` trong `ticket/entity`. Migration
+`006-create-ticketing-tables.sql` tạo bảng `tickets`, `ticket_messages` và được
+include từ master changelog; Hibernate tiếp tục dùng `ddl-auto: validate`.
+
+- `Ticket`: UUID tự sinh, `userId` bắt buộc, `category` không rỗng và tối đa
+  64 ký tự, `status`, `priority`, `assignedTo` nullable và `createdAt` bắt buộc.
+  `createdAt` là bổ sung triển khai để phục vụ sắp xếp danh sách/hàng đợi;
+  caller truyền thời gian và không sửa thời gian tạo sau khi lưu.
+- `TicketStatus`: `OPEN`, `AI_HANDLING`, `WAITING_CUSTOMER`, `ESCALATED`,
+  `HUMAN_HANDLING`, `RESOLVED`, theo vòng đời trong mục 3.
+- `TicketPriority`: `LOW`, `NORMAL`, `HIGH`, `URGENT`. Đây là lựa chọn triển khai,
+  không phải tập giá trị được chốt trong tài liệu thiết kế gốc.
+- `TicketMessage`: UUID tự sinh, quan hệ `ManyToOne LAZY` tới `Ticket`,
+  `senderType`, `content` không rỗng (tối đa 10.000 ký tự) và `createdAt` bắt buộc.
+  `TicketSenderType` gồm `CUSTOMER`, `SUPPORT_AGENT`, `AI`, `SYSTEM`.
+- `category` dùng chuỗi vì nguồn chưa định nghĩa danh sách loại ticket; các giá
+  trị như `ORDER`, `SHIPMENT` trong test chỉ là ví dụ, chưa phải enum/allowlist.
+- Database có foreign key từ `userId`/`assignedTo` tới `users.id` và từ message
+  tới ticket, CHECK constraint cho enum và chuỗi rỗng, cùng index cho danh sách
+  ticket theo user/trạng thái/người phụ trách và message theo ticket/thời gian.
+  Không cascade xóa user, ticket hoặc hội thoại.
+- Đã có entity/schema, repository và DTO; chưa có service hay API ticket.
+  Kiểm tra ownership, role người được phân công/người gửi, xác định danh tính
+  người gửi và quy tắc chuyển trạng thái sẽ được thực hiện ở luồng nghiệp vụ;
+  enum và foreign key không tự thực hiện các kiểm tra quyền đó.
+
+`TicketPersistenceTests` kiểm tra lưu/đọc quan hệ, UUID, timestamp, enum dạng
+chuỗi, validation và ràng buộc database. Test migration database rỗng cũng
+kiểm tra hai bảng mới và việc chạy lại changelog không tạo trùng changeset.
+
+#### Repository và DTO ticketing
+
+`ticket/repository` có `TicketRepository` và `TicketMessageRepository`, đều
+đánh dấu `@RepositoryRestResource(exported = false)` để Spring Data REST không
+tự công khai entity thành API.
+
+- `TicketRepository`: danh sách theo `userId`, lọc thêm `status`, chi tiết theo
+  `id` và `userId`, danh sách theo người được phân công và trạng thái, cùng hàng
+  đợi chưa phân công theo trạng thái.
+- `TicketMessageRepository`: danh sách theo ticket, danh sách theo ticket kèm
+  chủ sở hữu, chi tiết message theo `id` và `ticketId`.
+- Mọi truy vấn danh sách trả `Page` và nhận `Pageable`. Caller cần chọn sort ổn
+  định, ví dụ ticket `createdAt DESC, id DESC`, message `createdAt ASC, id ASC`.
+  Service sau này phải xác minh danh tính/ownership trước khi dùng các truy vấn
+  không có `userId`; truy vấn theo assignee không tự kiểm tra role nhân viên.
+  Danh sách rỗng không phân biệt ticket không tồn tại với ticket chưa có message;
+  service cần kiểm tra ticket riêng để trả đúng `404`.
+
+`ticket/dto` có bốn Java record:
+
+| DTO | Trường / mục đích |
+| --- | --- |
+| `TicketDto` | `id`, `userId`, `category`, `status`, `priority`, `assignedTo`, `createdAt` |
+| `TicketMessageDto` | `id`, `ticketId`, `senderType`, `content`, `createdAt`; không nhúng entity JPA |
+| `CreateTicketRequest` | `category` không rỗng, tối đa 64 ký tự; `content` là nội dung message đầu tiên, không rỗng, tối đa 10.000 ký tự |
+| `CreateTicketMessageRequest` | Chỉ có `content` không rỗng, tối đa 10.000 ký tự |
+
+Request không nhận `userId`, `senderType`, trạng thái, độ ưu tiên, assignee hoặc
+timestamp từ client. Service sẽ lấy danh tính từ authentication, tự xác định
+loại người gửi và các giá trị quản lý; việc lưu ticket cùng message đầu tiên
+cần nằm trong một transaction. Đây là hợp đồng DTO, chưa có endpoint thực thi.
+Không thêm cache cho repository/DTO này.
+
+Test kiểm tra phân trang, filter, cách ly user/ticket/assignee, repository không
+được export thành REST, validation biên độ dài và JSON round-trip của DTO.
+
 ### 6.2. API inventory
 
 | Method | Endpoint | Mục đích |
