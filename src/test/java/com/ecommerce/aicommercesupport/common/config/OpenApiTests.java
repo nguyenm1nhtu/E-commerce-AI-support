@@ -52,6 +52,7 @@ class OpenApiTests {
                 .andExpect(jsonPath("$.paths['/api/orders/{orderId}/items/{itemId}'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/orders/{orderId}/payment'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/orders/{orderId}/shipment'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/orders/{orderId}'].put").exists())
                 .andExpect(jsonPath("$.paths['/api/orders'].get.parameters[*].name")
                         .value(containsInAnyOrder("page", "size", "sort")))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
