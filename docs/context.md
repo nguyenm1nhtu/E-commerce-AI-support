@@ -222,7 +222,8 @@ include từ master changelog; Hibernate tiếp tục dùng `ddl-auto: validate`
   tới ticket, CHECK constraint cho enum và chuỗi rỗng, cùng index cho danh sách
   ticket theo user/trạng thái/người phụ trách và message theo ticket/thời gian.
   Không cascade xóa user, ticket hoặc hội thoại.
-- Đã có entity/schema, repository, DTO và service tạo ticket; API ticket chưa hoàn tất.
+- Đã có entity/schema, repository, DTO, service vòng đời ticket và REST controller
+  cho customer/support agent; tích hợp model AI thực tế chưa triển khai.
   Kiểm tra ownership, role người được phân công/người gửi, xác định danh tính
   người gửi và quy tắc chuyển trạng thái sẽ được thực hiện ở luồng nghiệp vụ;
   enum và foreign key không tự thực hiện các kiểm tra quyền đó.
@@ -288,9 +289,9 @@ Service đọc user từ database, yêu cầu tài khoản tồn tại và role 
 đầu tiên loại `CUSTOMER` từ `request.content()`. Ticket và message dùng cùng mốc
 thời gian tạo, nằm trong một transaction; lỗi lưu message rollback cả ticket,
 kể cả ticket đã flush. Service trả `TicketDto` của ticket vừa lưu.
-Controller sau này phải lấy `userId` từ authentication, không nhận UUID chủ sở
-hữu từ body. Service nhận UUID do caller tin cậy truyền vào; nó không tự đối
-chiếu UUID đó với SecurityContext. Chưa có endpoint thực thi.
+Controller lấy `userId` từ authentication qua `CurrentUserId`, không nhận UUID
+chủ sở hữu từ body. Service nhận UUID do caller tin cậy truyền vào; nó không tự
+đối chiếu UUID đó với SecurityContext. Endpoint thực thi được mô tả bên dưới.
 
 Các lỗi của luồng tạo ticket được phân biệt như sau (HTTP status do exception
 handler hiện có ánh xạ khi service được gọi từ controller):

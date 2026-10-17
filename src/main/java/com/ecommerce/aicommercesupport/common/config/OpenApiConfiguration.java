@@ -24,7 +24,7 @@ public class OpenApiConfiguration {
     public OpenAPI commerceOpenApi() {
         return new OpenAPI()
                 .info(new Info().title("Commerce Support API").version("v1")
-                        .description("Customer order read API. Authorize with a Bearer JWT whose subject is the user UUID."))
+                        .description("Commerce and customer support API. Authorize with a Bearer JWT whose subject is the user UUID."))
                 .components(new Components().addSecuritySchemes("bearerAuth",
                         new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT")))
                 .addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
@@ -53,6 +53,12 @@ public class OpenApiConfiguration {
                     }
                 }
                 operation.getResponses().addApiResponse("400", errorResponse("Invalid request"));
+                if (pathName.startsWith("/api/tickets") || pathName.startsWith("/api/support/tickets")) {
+                    operation.getResponses().addApiResponse("409", errorResponse("Ticket state conflicts with the requested operation"));
+                }
+                if (pathName.equals("/api/tickets")) {
+                    operation.getResponses().addApiResponse("503", errorResponse("Ticket storage unavailable"));
+                }
                 operation.getResponses().addApiResponse("401", pathName.startsWith("/api/auth/")
                         ? errorResponse("Invalid credentials or refresh token")
                         : new ApiResponse().description("Authentication required (Spring Security)"));
