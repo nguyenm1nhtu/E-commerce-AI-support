@@ -11,15 +11,20 @@ import com.ecommerce.aicommercesupport.order.entity.Order;
 import com.ecommerce.aicommercesupport.order.entity.OrderItem;
 import com.ecommerce.aicommercesupport.order.repository.OrderRepository;
 import com.ecommerce.aicommercesupport.order.repository.OrderItemRepository;
+import com.ecommerce.aicommercesupport.payment.dto.CreatePaymentRequest;
+import com.ecommerce.aicommercesupport.payment.dto.PaymentDto;
+import com.ecommerce.aicommercesupport.payment.entity.Payment;
 import com.ecommerce.aicommercesupport.payment.repository.PaymentRepository;
 import com.ecommerce.aicommercesupport.shipment.repository.ShipmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Fixture writes only; these operations do not invoke payment or shipping providers. */
 @Service
@@ -46,6 +51,16 @@ public class CommerceFixtureService {
         return new OrderItemDto(item.getId(), orderId, item.getProductName(), item.getQuantity(), item.getUnitPrice());
     }
 
+    public PaymentDto createPayment(UUID userId, UUID orderId, CreatePaymentRequest request) {
+        var order = owned(userId, orderId);
+        if (payments.findByOrder_Id(orderId).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order already has a payment");
+        }
+        var payment = payments.save(new Payment(order, request.status(), request.providerRef(), request.paidAt()));
+        evict("payment-by-order", orderId);
+        return new PaymentDto(payment.getId(), orderId, payment.getStatus(), payment.getProviderRef(), payment.getPaidAt());
+    }
+
     public void deleteItem(UUID userId, UUID orderId, UUID itemId) {
         owned(userId, orderId);
         var item = items.findByIdAndOrder_Id(itemId, orderId)
@@ -58,6 +73,14 @@ public class CommerceFixtureService {
     public void deleteItems(UUID userId, UUID orderId) {
         owned(userId, orderId);
         removeItems(orderId);
+    }
+
+    public void deletePayment(UUID userId, UUID orderId) {
+        owned(userId, orderId);
+        var payment = payments.findByOrder_Id(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found for order: " + orderId));
+        payments.delete(payment);
+        evict("payment-by-order", orderId);
     }
 
     public void deleteOrder(UUID userId, UUID orderId) {
@@ -80,6 +103,13 @@ public class CommerceFixtureService {
         for (var order : orders.findAllByUserIdOrderById(userId)) {
             owned(userId, order.getId());
             removeItems(order.getId());
+        }
+    }
+
+    public void deleteAllPayments(UUID userId) {
+        for (var order : orders.findAllByUserIdOrderById(userId)) {
+            owned(userId, order.getId());
+            removePayment(order.getId());
         }
     }
 

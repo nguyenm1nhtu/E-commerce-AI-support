@@ -359,6 +359,19 @@ Body mẫu:
 Sau commit, thêm/xóa item evict `order-items` theo `orderId`; xóa item còn evict
 `order-item` theo `orderId:itemId`. Không thay đổi tổng tiền fixture của order.
 
+#### Payment
+
+- `POST /api/orders/{orderId}/payment`: tạo payment; đã tồn tại trả `409`.
+- `DELETE /api/orders/{orderId}/payment`: xóa payment của order.
+- `DELETE /api/payments`: xóa toàn bộ payment thuộc user hiện tại.
+
+Body mẫu:
+```json
+{"status":"PAID","providerRef":"TEST-PAY-001","paidAt":"2026-10-17T00:05:00Z"}
+```
+
+Sau commit, các write payment evict `payment-by-order` theo `orderId`.
+
 TTL và key giữ nguyên, mặc định `10m` (`REDIS_CACHE_TTL`). Ghi DB trực tiếp,
 lỗi eviction hoặc read đồng thời write vẫn có thể để cache cũ đến hết TTL.
 Không dùng `FLUSHDB`/`FLUSHALL`; cache auth không bị tác động.
