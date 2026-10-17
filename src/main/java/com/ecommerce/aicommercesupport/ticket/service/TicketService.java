@@ -23,6 +23,8 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.stereotype.Service;
@@ -82,6 +84,42 @@ public class TicketService {
             }
             throw exception;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public TicketDto getTicketByIdAndUserId(UUID ticketId, UUID userId) {
+        return toDto(findOwnedTicket(ticketId, userId));
+    }
+
+    @Transactional(readOnly = true)
+    public void requireTicketOwnership(UUID ticketId, UUID userId) {
+        findOwnedTicket(ticketId, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TicketDto> getTicketsByUserId(UUID userId, TicketStatus status, Pageable pageable) {
+        if (userId == null) {
+            throw new AuthenticationCredentialsNotFoundException("Authentication required");
+        }
+        var user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        if (user.getRole() != UserRole.CUSTOMER) {
+            throw new AccessDeniedException("Only customers can list their tickets");
+        }
+        var page = TicketPages.validate(pageable, false);
+        return (status == null ? ticketRepository.findByUserId(userId, page)
+                : ticketRepository.findByUserIdAndStatus(userId, status, page)).map(this::toDto);
+    }
+
+    private Ticket findOwnedTicket(UUID ticketId, UUID userId) {
+        if (userId == null) {
+            throw new AuthenticationCredentialsNotFoundException("Authentication required");
+        }
+        if (ticketId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ticket ID is required");
+        }
+        return ticketRepository.findByIdAndUserId(ticketId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + ticketId));
     }
 
     private void validateRequest(CreateTicketRequest request) {
