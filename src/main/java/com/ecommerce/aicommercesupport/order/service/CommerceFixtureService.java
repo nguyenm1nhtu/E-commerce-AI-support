@@ -15,6 +15,9 @@ import com.ecommerce.aicommercesupport.payment.dto.CreatePaymentRequest;
 import com.ecommerce.aicommercesupport.payment.dto.PaymentDto;
 import com.ecommerce.aicommercesupport.payment.entity.Payment;
 import com.ecommerce.aicommercesupport.payment.repository.PaymentRepository;
+import com.ecommerce.aicommercesupport.shipment.dto.CreateShipmentRequest;
+import com.ecommerce.aicommercesupport.shipment.dto.ShipmentDto;
+import com.ecommerce.aicommercesupport.shipment.entity.Shipment;
 import com.ecommerce.aicommercesupport.shipment.repository.ShipmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.CacheManager;
@@ -61,6 +64,18 @@ public class CommerceFixtureService {
         return new PaymentDto(payment.getId(), orderId, payment.getStatus(), payment.getProviderRef(), payment.getPaidAt());
     }
 
+    public ShipmentDto createShipment(UUID userId, UUID orderId, CreateShipmentRequest request) {
+        var order = owned(userId, orderId);
+        if (shipments.findByOrder_Id(orderId).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order already has a shipment");
+        }
+        var shipment = shipments.save(new Shipment(order, request.status(), request.carrier(),
+                request.trackingCode(), request.deliveredAt()));
+        evict("shipment-by-order", orderId);
+        return new ShipmentDto(shipment.getId(), orderId, shipment.getStatus(), shipment.getCarrier(),
+                shipment.getTrackingCode(), shipment.getDeliveredAt());
+    }
+
     public void deleteItem(UUID userId, UUID orderId, UUID itemId) {
         owned(userId, orderId);
         var item = items.findByIdAndOrder_Id(itemId, orderId)
@@ -81,6 +96,14 @@ public class CommerceFixtureService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found for order: " + orderId));
         payments.delete(payment);
         evict("payment-by-order", orderId);
+    }
+
+    public void deleteShipment(UUID userId, UUID orderId) {
+        owned(userId, orderId);
+        var shipment = shipments.findByOrder_Id(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Shipment not found for order: " + orderId));
+        shipments.delete(shipment);
+        evict("shipment-by-order", orderId);
     }
 
     public void deleteOrder(UUID userId, UUID orderId) {
@@ -110,6 +133,13 @@ public class CommerceFixtureService {
         for (var order : orders.findAllByUserIdOrderById(userId)) {
             owned(userId, order.getId());
             removePayment(order.getId());
+        }
+    }
+
+    public void deleteAllShipments(UUID userId) {
+        for (var order : orders.findAllByUserIdOrderById(userId)) {
+            owned(userId, order.getId());
+            removeShipment(order.getId());
         }
     }
 

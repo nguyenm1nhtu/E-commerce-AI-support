@@ -372,6 +372,19 @@ Body mẫu:
 
 Sau commit, các write payment evict `payment-by-order` theo `orderId`.
 
+#### Shipment
+
+- `POST /api/orders/{orderId}/shipment`: tạo shipment; đã tồn tại trả `409`.
+- `DELETE /api/orders/{orderId}/shipment`: xóa shipment của order.
+- `DELETE /api/shipments`: xóa toàn bộ shipment thuộc user hiện tại.
+
+Body mẫu:
+```json
+{"status":"SHIPPED","carrier":"GHN","trackingCode":"TEST-SHIP-001"}
+```
+
+Sau commit, các write shipment evict `shipment-by-order` theo `orderId`.
+
 TTL và key giữ nguyên, mặc định `10m` (`REDIS_CACHE_TTL`). Ghi DB trực tiếp,
 lỗi eviction hoặc read đồng thời write vẫn có thể để cache cũ đến hết TTL.
 Không dùng `FLUSHDB`/`FLUSHALL`; cache auth không bị tác động.
