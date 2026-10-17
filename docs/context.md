@@ -344,6 +344,21 @@ Các write cùng order khóa dòng order trong transaction. Khi xóa order,
 evict `order-items`, `payment-by-order`, `shipment-by-order` theo `orderId`
 và `order-item` theo `orderId:itemId` của từng item sau commit; rollback không evict.
 
+#### Order item
+
+- `POST /api/orders/{orderId}/items`: thêm item.
+- `DELETE /api/orders/{orderId}/items/{itemId}`: xóa một item.
+- `DELETE /api/orders/{orderId}/items`: xóa tất cả item của order.
+- `DELETE /api/order-items`: xóa tất cả item thuộc user hiện tại.
+
+Body mẫu:
+```json
+{"productName":"Bàn phím","quantity":2,"unitPrice":100000}
+```
+
+Sau commit, thêm/xóa item evict `order-items` theo `orderId`; xóa item còn evict
+`order-item` theo `orderId:itemId`. Không thay đổi tổng tiền fixture của order.
+
 TTL và key giữ nguyên, mặc định `10m` (`REDIS_CACHE_TTL`). Ghi DB trực tiếp,
 lỗi eviction hoặc read đồng thời write vẫn có thể để cache cũ đến hết TTL.
 Không dùng `FLUSHDB`/`FLUSHALL`; cache auth không bị tác động.

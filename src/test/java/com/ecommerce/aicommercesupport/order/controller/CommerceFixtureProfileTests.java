@@ -14,9 +14,11 @@ class CommerceFixtureProfileTests {
     void fixtureBeansAreUnavailableOutsideDevelopmentAndWhenProductionIsActive(String profiles) {
         try (var context = new AnnotationConfigApplicationContext()) {
             context.getEnvironment().setActiveProfiles(profiles.split(","));
-            context.register(OrderFixtureController.class, CommerceFixtureService.class);
+            context.register(OrderFixtureController.class, OrderItemFixtureController.class,
+                    CommerceFixtureService.class);
             context.refresh();
             assertThat(context.getBeansOfType(OrderFixtureController.class)).isEmpty();
+            assertThat(context.getBeansOfType(OrderItemFixtureController.class)).isEmpty();
             assertThat(context.getBeansOfType(CommerceFixtureService.class)).isEmpty();
         }
     }

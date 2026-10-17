@@ -4,8 +4,11 @@ import java.util.UUID;
 
 import com.ecommerce.aicommercesupport.common.exception.ResourceNotFoundException;
 import com.ecommerce.aicommercesupport.order.dto.CreateOrderRequest;
+import com.ecommerce.aicommercesupport.order.dto.CreateOrderItemRequest;
 import com.ecommerce.aicommercesupport.order.dto.OrderDto;
+import com.ecommerce.aicommercesupport.order.dto.OrderItemDto;
 import com.ecommerce.aicommercesupport.order.entity.Order;
+import com.ecommerce.aicommercesupport.order.entity.OrderItem;
 import com.ecommerce.aicommercesupport.order.repository.OrderRepository;
 import com.ecommerce.aicommercesupport.order.repository.OrderItemRepository;
 import com.ecommerce.aicommercesupport.payment.repository.PaymentRepository;
@@ -36,6 +39,27 @@ public class CommerceFixtureService {
         return new OrderDto(order.getId(), userId, order.getStatus(), order.getOrderedAt(), order.getTotalAmount());
     }
 
+    public OrderItemDto createItem(UUID userId, UUID orderId, CreateOrderItemRequest request) {
+        var order = owned(userId, orderId);
+        var item = items.save(new OrderItem(order, request.productName(), request.quantity(), request.unitPrice()));
+        evict("order-items", orderId);
+        return new OrderItemDto(item.getId(), orderId, item.getProductName(), item.getQuantity(), item.getUnitPrice());
+    }
+
+    public void deleteItem(UUID userId, UUID orderId, UUID itemId) {
+        owned(userId, orderId);
+        var item = items.findByIdAndOrder_Id(itemId, orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order item not found: " + itemId));
+        items.delete(item);
+        evict("order-item", orderId + ":" + itemId);
+        evict("order-items", orderId);
+    }
+
+    public void deleteItems(UUID userId, UUID orderId) {
+        owned(userId, orderId);
+        removeItems(orderId);
+    }
+
     public void deleteOrder(UUID userId, UUID orderId) {
         var order = owned(userId, orderId);
         removeItems(orderId);
@@ -49,6 +73,13 @@ public class CommerceFixtureService {
     public void deleteAllOrders(UUID userId) {
         for (var order : orders.findAllByUserIdOrderById(userId)) {
             deleteOrder(userId, order.getId());
+        }
+    }
+
+    public void deleteAllItems(UUID userId) {
+        for (var order : orders.findAllByUserIdOrderById(userId)) {
+            owned(userId, order.getId());
+            removeItems(order.getId());
         }
     }
 
