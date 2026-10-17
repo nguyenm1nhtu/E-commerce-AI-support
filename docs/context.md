@@ -318,68 +318,80 @@ không được phép, giới hạn nội dung, lỗi repository và race xóa u
 hợp kiểm tra lưu đủ ticket/message và rollback ticket đã flush khi ghi message
 thất bại, kể cả khi lỗi database được chuyển thành `503`.
 
-### 6.2. API inventory
+### API CRUD commerce
 
-| Method | Endpoint | Mục đích |
+CRUD được triển khai trực tiếp trong `OrderController`/`OrderService`,
+`OrderItemController`/`OrderItemService`, `PaymentController`/`PaymentService`
+và `ShipmentController`/`ShipmentService`. Không giới hạn profile; Swagger gom
+chung trong nhóm Orders, Order items, Payments, Shipments. Đây là CRUD dữ liệu
+cơ bản, chưa gọi nhà cung cấp thanh toán/vận chuyển hoặc thực thi workflow
+checkout. JWT vẫn bắt buộc; `userId` lấy từ JWT,
+không nhận từ request body. Mọi thao tác, kể cả xóa toàn bộ, chỉ tác động đến
+order của user đăng nhập. Order không tồn tại hoặc không thuộc user trả `404`.
+
+| Method | Endpoint | Ý nghĩa |
 | --- | --- | --- |
-| POST | `/api/auth/register` | Đăng ký |
-| POST | `/api/auth/login` | Đăng nhập JWT |
-| GET | `/api/auth/csrf` | Lấy token chống CSRF trước khi gọi POST auth |
-| POST | `/api/auth/logout` | Thu hồi phiên refresh hiện tại và xóa cookie |
-| POST | `/api/auth/refresh` | Cấp access token mới và xoay vòng refresh token qua cookie HttpOnly |
-| GET | `/api/orders` | Danh sách đơn của customer |
-| GET | `/api/orders/{id}` | Chi tiết đơn |
-| GET | `/api/orders/{id}/payment` | Trạng thái thanh toán |
-| GET | `/api/orders/{id}/shipment` | Trạng thái vận chuyển |
-| POST | `/api/tickets` | Tạo ticket |
-| GET | `/api/tickets/{id}` | Chi tiết ticket |
-| POST | `/api/tickets/{id}/messages` | Thêm tin nhắn / kích hoạt AI hỗ trợ |
-| POST | `/api/orders/{id}/returns` | Tạo yêu cầu trả hàng |
-| POST | `/api/admin/knowledge/documents` | Ingest tài liệu chính sách |
-| PATCH | `/api/admin/knowledge/documents/{id}/status` | Activate/deactivate phiên bản kiến thức |
-| POST | `/api/ai/knowledge/query` | Kiểm thử RAG trực tiếp |
-| POST | `/api/ai/agent/chat` | Tương tác agent |
+| POST | `/api/orders` | Tạo order cho user hiện tại |
+| PUT | `/api/orders/{orderId}` | Cập nhật order |
+| DELETE | `/api/orders/{orderId}` | Xóa order cùng item, payment, shipment |
+| DELETE | `/api/orders` | Xóa toàn bộ order của user cùng dữ liệu con |
+| POST | `/api/orders/{orderId}/items` | Thêm item |
+| PUT | `/api/orders/{orderId}/items/{itemId}` | Cập nhật item |
+| DELETE | `/api/orders/{orderId}/items/{itemId}` | Xóa một item |
+| DELETE | `/api/orders/{orderId}/items` | Xóa tất cả item trong order |
+| DELETE | `/api/order-items` | Xóa tất cả item trong các order của user |
+| POST | `/api/orders/{orderId}/payment` | Tạo payment; đã tồn tại trả `409` |
+| PUT | `/api/orders/{orderId}/payment` | Cập nhật payment |
+| DELETE | `/api/orders/{orderId}/payment` | Xóa payment của order |
+| DELETE | `/api/payments` | Xóa toàn bộ payment thuộc user |
+| POST | `/api/orders/{orderId}/shipment` | Tạo shipment; đã tồn tại trả `409` |
+| PUT | `/api/orders/{orderId}/shipment` | Cập nhật shipment |
+| DELETE | `/api/orders/{orderId}/shipment` | Xóa shipment của order |
+| DELETE | `/api/shipments` | Xóa toàn bộ shipment thuộc user |
 
-## 7. Kiến trúc RAG
+Các endpoint GET hiện có giữ nguyên: danh sách/chi tiết order, danh sách/chi
+tiết item, payment/shipment theo order. POST thành công trả `201` và DTO có ID;
+PUT trả `200` và DTO; DELETE trả `204`. PUT thay thế toàn bộ trường có thể sửa,
+có cùng trường và validation với POST; trường nullable không có trong body
+được đặt null. PUT không upsert, không cho sửa id/userId/orderId qua body.
+Thiếu trường bắt buộc, enum sai, số lượng/giá không hợp lệ trả `400`.
+Xóa collection rỗng
+vẫn trả `204`; xóa/cập nhật resource đơn không tồn tại trả `404`. Các write cùng order
+khóa dòng order trong transaction để tránh tạo trùng payment/shipment hoặc
+tạo dữ liệu con đồng thời với xóa order qua các API này.
 
-### 7.1. Knowledge corpus
+Ví dụ body POST/PUT, tạo order trước rồi đến các resource con:
 
-Bắt đầu bằng Markdown để versioning xác định và dễ review; thêm PDF upload sau khi retrieval pipeline hoạt động. Khoảng **10-20 tài liệu** đủ cho portfolio nếu có versioning thực tế và chính sách lịch sử xung đột.
-
-```text
-knowledge-base/
-  return-policy.md
-  refund-policy.md
-  shipping-policy.md
-  warranty-policy.md
-  cancellation-policy.md
-  payment-faq.md
-  damaged-item-policy.md
-  voucher-policy.md
-  support-handbook.md
+```json
+{"status":"PENDING","orderedAt":"2026-10-17T00:00:00Z","totalAmount":200000}
 ```
 
-### 7.2. Pipeline
+```json
+{"productName":"Bàn phím","quantity":2,"unitPrice":100000}
+```
 
-Ingestion: `Document → parse → normalize → split/chunk → attach metadata → embed → store in pgvector`.
+```json
+{"status":"PAID","providerRef":"TEST-PAY-001","paidAt":"2026-10-17T00:05:00Z"}
+```
 
-| Bước | Cách thực hiện / mục đích |
-| --- | --- |
-| Parse | Markdown trước, PDF parser sau để dễ kiểm thử giai đoạn đầu |
-| Chunk | Bắt đầu đơn giản; điều chỉnh size/overlap bằng thực nghiệm, cân bằng tính liền mạch ngữ nghĩa và độ chi tiết retrieval |
-| Metadata | `type`, `version`, `effectiveDate`, `status`, `source`; lọc nội dung cũ hoặc sai domain |
-| Embedding | Model embedding chuyên dụng cho biểu diễn tìm kiếm ngữ nghĩa |
-| Store | PostgreSQL + pgvector, giữ vector gần nền tảng dữ liệu quan hệ |
-| Retrieve | Top-K + metadata filter lấy policy chunks liên quan đang active |
-| Generate | LLM trả lời dựa trên bằng chứng đã lấy |
-| Cite | Trả tên tài liệu/section để kiểm tra được nguồn |
+```json
+{"status":"SHIPPED","carrier":"GHN","trackingCode":"TEST-SHIP-001"}
+```
 
-### 7.3. Đánh giá
-
-- Tạo **30-50 câu hỏi benchmark**, mỗi câu có tài liệu nguồn kỳ vọng.
-- Đo retrieval hit rate / độ đúng nguồn top-K trước khi đánh giá văn phong sinh ra.
-- Theo dõi unsupported-answer rate và escalation rate.
-- Kiểm tra version filtering với policy trả hàng **7 ngày đã obsolete** và policy **14 ngày đang active**.
+`totalAmount` được nhập trực tiếp, không tự tính lại khi thêm/sửa/xóa
+item. Xóa order không xóa ticket; ticket không có foreign key tới order.
+API ghi evict các cache liên quan sau commit như mục cache bên dưới; key và
+TTL giữ nguyên (`10m` mặc định). Ghi trực tiếp database, lỗi eviction hoặc read
+đồng thời với write vẫn có thể làm dữ liệu cache cũ tồn tại đến hết TTL.
+`CacheEviction` chỉ chịu trách nhiệm evict sau commit, không gom nghiệp vụ các
+module. Item write evict `order-items` theo `orderId`; sửa/xóa item còn evict
+`order-item` theo `orderId:itemId`. Payment/shipment write evict lần lượt
+`payment-by-order`/`shipment-by-order` theo `orderId`. Xóa order evict toàn bộ
+key con liên quan; rollback không evict. Không dùng `FLUSHDB`/`FLUSHALL`.
+Test `CommerceCrudControllerTests` kiểm tra JWT, validation, ownership,
+CRUD, duplicate, xóa dây chuyền, bulk theo user, cache reload và rollback.
+`CommerceCrudProfileTests` kiểm tra controller/service đăng ký được với các
+profile default/dev/test/prod.
 
 ## 8. Kiến trúc agent và audit
 
@@ -666,8 +678,8 @@ của order tồn tại. `order/config/OrderCacheConfiguration` cấu hình JSON
 riêng cho kiểu danh sách này và khôi phục danh sách không thể sửa, tránh phụ thuộc
 metadata kiểu collection của serializer chung. Không cache lỗi `404`.
 Dữ liệu có thể cũ tối đa TTL đang cấu hình (`10m` mặc định,
-đổi bằng `REDIS_CACHE_TTL`, ví dụ `30s`). Hiện chưa có API ghi payment/shipment;
-khi bổ sung, phải evict cache tương ứng theo `orderId` sau transaction commit.
+đổi bằng `REDIS_CACHE_TTL`, ví dụ `30s`). API CRUD commerce được mô tả ở mục
+bên trên và evict cache liên quan sau transaction commit.
 Khi thêm/sửa/xóa item, phải evict `order-items` theo `orderId` và `order-item`
 theo `orderId:itemId` cho các item bị ảnh hưởng sau transaction commit.
 Thay đổi trực tiếp database chưa tự xóa cache. API chi tiết order đang gọi các
@@ -675,7 +687,7 @@ method `findPaymentByOrderId`/`findShipmentByOrderId` không cache, nên có th�
 giá trị mới sớm hơn hai API riêng trong thời gian TTL. Riêng danh sách items trong
 response chi tiết order dùng chung cache `order-items`, vì gọi qua bean
 `OrderItemService`. Không cache toàn bộ response chi tiết order hoặc danh sách
-order phân trang: các dữ liệu tổng hợp này chưa có cơ chế invalidation phù hợp.
+order phân trang; hai API này tiếp tục đọc database khi gọi.
 Các method tra cứu khác chưa áp dụng cache.
 
 Test `CommerceCacheTests` chạy mặc định với cache memory để kiểm tra cache hit,
