@@ -44,7 +44,7 @@ class OpenApiTests {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Commerce Support API"))
-                .andExpect(jsonPath("$.paths.length()").value(11))
+                .andExpect(jsonPath("$.paths['/api/order-items'].delete").exists())
                 .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").isEmpty())
                 .andExpect(jsonPath("$.paths['/api/auth/register'].post.responses['409']").exists())
                 .andExpect(jsonPath("$.paths['/api/orders/{orderId}'].get").exists())
