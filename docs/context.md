@@ -318,6 +318,36 @@ không được phép, giới hạn nội dung, lỗi repository và race xóa u
 hợp kiểm tra lưu đủ ticket/message và rollback ticket đã flush khi ghi message
 thất bại, kể cả khi lỗi database được chuyển thành `503`.
 
+### API tạo và dọn dữ liệu commerce để test
+
+Các controller `*FixtureController` chỉ bật khi có profile `dev` hoặc `test`
+và không có `prod`. Swagger gom vào nhóm `Test data - ...`. JWT bắt buộc;
+userId lấy từ JWT. Mọi thao tác, kể cả xóa toàn bộ, chỉ tác động đến dữ liệu
+của user đăng nhập. Resource không tồn tại hoặc không thuộc user trả `404`.
+POST trả `201` và DTO; DELETE trả `204`, kể cả collection rỗng.
+Đây là dữ liệu thử nghiệm, không gọi nhà cung cấp thanh toán/vận chuyển.
+
+#### Order
+
+- `POST /api/orders`: tạo order cho user hiện tại.
+- `DELETE /api/orders/{orderId}`: xóa order cùng item, payment, shipment.
+- `DELETE /api/orders`: xóa toàn bộ order của user cùng dữ liệu con.
+
+Body mẫu:
+```json
+{"status":"PENDING","orderedAt":"2026-10-17T00:00:00Z","totalAmount":200000}
+```
+
+`totalAmount` là giá trị fixture nhập trực tiếp, không tự tính lại theo item.
+Xóa order không xóa ticket (ticket không có foreign key tới order).
+Các write cùng order khóa dòng order trong transaction. Khi xóa order,
+evict `order-items`, `payment-by-order`, `shipment-by-order` theo `orderId`
+và `order-item` theo `orderId:itemId` của từng item sau commit; rollback không evict.
+
+TTL và key giữ nguyên, mặc định `10m` (`REDIS_CACHE_TTL`). Ghi DB trực tiếp,
+lỗi eviction hoặc read đồng thời write vẫn có thể để cache cũ đến hết TTL.
+Không dùng `FLUSHDB`/`FLUSHALL`; cache auth không bị tác động.
+
 ### 6.2. API inventory
 
 | Method | Endpoint | Mục đích |
@@ -666,8 +696,8 @@ của order tồn tại. `order/config/OrderCacheConfiguration` cấu hình JSON
 riêng cho kiểu danh sách này và khôi phục danh sách không thể sửa, tránh phụ thuộc
 metadata kiểu collection của serializer chung. Không cache lỗi `404`.
 Dữ liệu có thể cũ tối đa TTL đang cấu hình (`10m` mặc định,
-đổi bằng `REDIS_CACHE_TTL`, ví dụ `30s`). Hiện chưa có API ghi payment/shipment;
-khi bổ sung, phải evict cache tương ứng theo `orderId` sau transaction commit.
+đổi bằng `REDIS_CACHE_TTL`, ví dụ `30s`). Các API fixture đã triển khai được liệt kê ở mục tạo/dọn dữ liệu commerce;
+cache liên quan được evict sau transaction commit.
 Khi thêm/sửa/xóa item, phải evict `order-items` theo `orderId` và `order-item`
 theo `orderId:itemId` cho các item bị ảnh hưởng sau transaction commit.
 Thay đổi trực tiếp database chưa tự xóa cache. API chi tiết order đang gọi các
@@ -675,7 +705,7 @@ method `findPaymentByOrderId`/`findShipmentByOrderId` không cache, nên có th�
 giá trị mới sớm hơn hai API riêng trong thời gian TTL. Riêng danh sách items trong
 response chi tiết order dùng chung cache `order-items`, vì gọi qua bean
 `OrderItemService`. Không cache toàn bộ response chi tiết order hoặc danh sách
-order phân trang: các dữ liệu tổng hợp này chưa có cơ chế invalidation phù hợp.
+order phân trang; hai API này tiếp tục đọc database khi gọi.
 Các method tra cứu khác chưa áp dụng cache.
 
 Test `CommerceCacheTests` chạy mặc định với cache memory để kiểm tra cache hit,
