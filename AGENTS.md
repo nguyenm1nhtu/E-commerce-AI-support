@@ -9,14 +9,16 @@ under `src/main/resources/`. Tests mirror the Java package structure under
 `docs/context.md`). The Maven build is defined in `pom.xml`; use the checked-in
 Maven Wrapper (`mvnw` or `mvnw.cmd`) for reproducible commands.
 
-Tài liệu trong thư mục `docs/` phải viết bằng tiếng Việt, trừ khi người dùng
-yêu cầu rõ ràng viết bằng tiếng Anh. Giữ nguyên tên kỹ thuật, định danh trong
-code, đường dẫn, lệnh và dữ liệu mẫu khi cần để bảo đảm tính chính xác.
+Use English throughout repository content, including `AGENTS.md`, code
+comments, and configuration comments. Only documentation under `docs/` and
+README files should use Vietnamese, unless the user explicitly requests
+otherwise. Preserve technical names, code identifiers, paths, commands, and
+sample data where needed for accuracy.
 
-Trong `docs/`, chỉ được đưa `context.md`, `docker-compose.md` và
-`terminal-commands.md` vào Git để commit/push. Mọi tài liệu khác trong thư mục
-này, kể cả tài liệu sinh ra sau này, phải được `.gitignore` loại trừ và chỉ
-lưu cục bộ. Không dùng `git add -f` để đưa các tài liệu đó vào Git.
+Within `docs/`, only `context.md`, `docker-compose.md`, and
+`terminal-commands.md` may be committed or pushed to Git. All other documents
+in this directory, including future generated documents, must be excluded by
+`.gitignore` and kept local. Do not use `git add -f` to track those documents.
 
 Organize Java packages by feature module under `com.ecommerce.aicommercesupport`
 (for example, `order`, `payment`, and `shipment`), then by layer inside each
@@ -59,25 +61,26 @@ style and keep imports and formatting clean.
 
 ## Cache Guidelines
 
-Chủ động áp dụng Redis cache cho API đọc khi dữ liệu thường được đọc lại, ít
-thay đổi và chấp nhận được độ trễ cập nhật; không cache mọi API một cách máy móc.
-Mỗi lần thêm hoặc đổi cache, phải báo rõ cho người dùng endpoint/method đã đổi,
-cache key, TTL và giới hạn về độ mới của dữ liệu; cập nhật `docs/context.md`.
+Proactively apply Redis caching to read APIs when data is frequently reread,
+changes infrequently, and can tolerate delayed updates; do not cache every API
+indiscriminately. Whenever caching is added or changed, tell the user which
+endpoints/methods changed, the cache keys, TTLs, and freshness limitations;
+update `docs/context.md`.
 
-- Dùng DTO, không cache entity JPA, credentials hoặc token. Đặt TTL hữu hạn.
-- Kiểm tra authentication và ownership/authorization trước khi đọc cache,
-  kể cả cache hit; không cache kết quả kiểm tra quyền.
-- Key phải phân biệt đầy đủ resource, user/tenant nếu dữ liệu phụ thuộc người
-  xem, và filter/page/sort nếu cache danh sách có truy vấn hoặc phân trang.
-- Không cache lỗi `404`/`403`; có thể cache danh sách rỗng của resource tồn tại.
-- Khi thêm API ghi, evict các cache bị ảnh hưởng sau transaction commit, gồm
-  cache chi tiết, danh sách và dữ liệu tổng hợp. Nếu chưa có luồng ghi, ghi rõ
-  giới hạn stale theo TTL và việc cập nhật database trực tiếp không tự evict.
-- Test cache hit/miss, cách ly dữ liệu và quyền truy cập trên cache đã có sẵn,
-  reload sau eviction/hết hạn; kiểm tra JSON round-trip và TTL với Redis thật
-  khi thêm kiểu dữ liệu cache mới, đặc biệt collection hoặc dữ liệu phân trang.
-- Không dùng cache làm kho phiên/refresh token, không dùng `FLUSHDB` hoặc
-  `FLUSHALL` để xóa cache trên Redis đang giữ dữ liệu auth.
+- Cache DTOs, not JPA entities, credentials, or tokens. Set finite TTLs.
+- Check authentication and ownership/authorization before reading the cache,
+  including on cache hits; do not cache authorization decisions.
+- Keys must distinguish resources, users/tenants when data depends on the
+  viewer, and filters/pages/sort orders for queried or paginated lists.
+- Do not cache `404`/`403` errors; empty lists for existing resources may be cached.
+- When adding write APIs, evict affected detail, list, and aggregate caches
+  after transaction commit. If no write flow exists yet, document the maximum
+  staleness allowed by the TTL and that direct database updates do not evict caches.
+- Test cache hits/misses, data isolation, authorization on existing cache entries,
+  and reloading after eviction/expiration. Verify JSON round-trips and TTLs with
+  real Redis when adding new cached data types, especially collections or pages.
+- Do not use the cache as a session/refresh-token store. Do not use `FLUSHDB`
+  or `FLUSHALL` to clear caches on Redis instances holding authentication data.
 
 ## Testing Guidelines
 
