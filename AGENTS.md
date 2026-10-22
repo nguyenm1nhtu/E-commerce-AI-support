@@ -108,6 +108,11 @@ a pull request; no explicit coverage threshold is currently configured.
 
 ## Commit & Pull Request Guidelines
 
+Each commit must address exactly one logical change. Split unrelated features,
+fixes, documentation tasks, and refactors into separate commits before pushing.
+Tests and documentation directly supporting the same change belong with it.
+Never bundle unrelated work merely to reduce the number of commits.
+
 Recent commits use short, imperative summaries (for example, `Fix ...` or
 `Normalize ...`). Keep commits focused and messages concise. Open pull
 requests against `dev`, explain the behavior or files changed, include test
