@@ -10,13 +10,15 @@ function Assert-True($condition, $message) {
 
 function Invoke-Dev {
     $ErrorActionPreference = 'Continue'
-    $output = & $shell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fixture 'dev.ps1') 2>&1
-    return @{ Code = $LASTEXITCODE; Output = ($output -join "`n") }
+    $output = & $shell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fixture 'scripts/dev.ps1') 2>&1
+    # PowerShell wraps error text based on the terminal width and script path.
+    return @{ Code = $LASTEXITCODE; Output = (($output -join "`n") -replace '\s+', ' ') }
 }
 
 New-Item -ItemType Directory -Path $fixture | Out-Null
 try {
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'dev.ps1') -Destination $fixture
+    New-Item -ItemType Directory -Path (Join-Path $fixture 'scripts') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/dev.ps1') -Destination (Join-Path $fixture 'scripts')
     # Replace Docker and Maven in the temporary fixture; no Docker or Java required.
     $env:PATH = "$fixture;$previousPath"
     @'
@@ -54,7 +56,7 @@ exit /b 23
 '@ | Set-Content -LiteralPath (Join-Path $fixture 'capture.ps1') -Encoding UTF8
 
     $result = Invoke-Dev
-    Assert-True ($result.Code -eq 1 -and $result.Output.Contains('Missing .env.dev')) 'Missing file must fail clearly.'
+    Assert-True ($result.Code -eq 1 -and $result.Output -match 'Missing\s+\.env\.dev') "Missing file must fail clearly: $($result.Output)"
 
     'POSTGRES_PASSWORD=   # empty' | Set-Content -LiteralPath (Join-Path $fixture '.env.dev')
     $result = Invoke-Dev
@@ -101,7 +103,7 @@ AUTH_REFRESH_COOKIE_MAX_AGE=2d
     Remove-Item -LiteralPath (Join-Path $fixture 'capture.json')
     New-Item -ItemType File -Path (Join-Path $fixture 'docker-fail') | Out-Null
     $result = Invoke-Dev
-    Assert-True ($result.Code -eq 17 -and $result.Output -match 'Docker Compose\s+failed') 'Docker failure must propagate clearly.'
+    Assert-True ($result.Code -eq 17 -and $result.Output -match 'Docker\s+Compose\s+failed') 'Docker failure must propagate clearly.'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture 'capture.json'))) 'Docker failure must prevent backend startup.'
     Remove-Item -LiteralPath (Join-Path $fixture 'docker-fail')
 

@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
-$envFile = Join-Path $PSScriptRoot '.env.dev'
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$envFile = Join-Path $repoRoot '.env.dev'
 $allowedVariables = @(
     'POSTGRES_HOST', 'POSTGRES_PORT', 'POSTGRES_DB', 'POSTGRES_USER',
     'POSTGRES_PASSWORD', 'REDIS_HOST', 'REDIS_PORT', 'REDIS_NAMESPACE',
@@ -11,7 +12,7 @@ $allowedVariables = @(
 $previousValues = @{}
 $exitCode = 1
 
-Push-Location $PSScriptRoot
+Push-Location $repoRoot
 try {
     if (-not (Test-Path -LiteralPath $envFile -PathType Leaf)) {
         throw 'Missing .env.dev. Copy .env.example to .env.dev and fill in POSTGRES_PASSWORD.'
@@ -68,7 +69,7 @@ try {
 
     Write-Host 'Starting backend with the dev profile. Ctrl+C stops only the backend.'
     Write-Host 'To stop PostgreSQL and Redis: docker compose --env-file .env.dev -f compose.dev.yaml down'
-    & (Join-Path $PSScriptRoot 'mvnw.cmd') spring-boot:run '-Dspring-boot.run.profiles=dev'
+    & (Join-Path $repoRoot 'mvnw.cmd') spring-boot:run '-Dspring-boot.run.profiles=dev'
     $exitCode = $LASTEXITCODE
 } catch {
     Write-Error $_ -ErrorAction Continue

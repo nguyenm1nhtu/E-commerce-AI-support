@@ -27,7 +27,7 @@ Các API CRUD commerce phục vụ kiểm thử và thao tác dữ liệu cơ b�
 Yêu cầu JDK 25, Docker Compose, PostgreSQL và Redis. Trong PowerShell, chuẩn bị `.env.dev` theo `.env.example`, rồi chạy:
 
 ```powershell
-.\dev.ps1
+.\scripts\dev.ps1
 ```
 
 Script khởi động PostgreSQL/Redis bằng Docker Compose và chạy backend với profile `dev`. Backend mặc định ở `http://localhost:8080`; Swagger UI ở `http://localhost:8080/swagger-ui/index.html`.

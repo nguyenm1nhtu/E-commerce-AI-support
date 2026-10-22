@@ -113,7 +113,7 @@ Test đặt dưới `src/test/java`, theo module và trách nhiệm tương ứn
 commerce kiểm tra phối hợp order/payment/shipment nằm trong module `order`,
 vì luồng truy cập bắt đầu từ đơn hàng. Cấu hình ứng dụng, Liquibase và Lua nằm
 lần lượt tại `src/main/resources/`, `db/changelog/` và `redis/auth/` bên trong
-resources. Script khởi chạy `dev.ps1` và Compose nằm ở thư mục gốc; test script
+resources. Script khởi chạy nằm tại `scripts/dev.ps1`; Compose nằm ở thư mục gốc; test script
 nằm trong `scripts/tests/`.
 
 ## 5. Luồng nghiệp vụ chính

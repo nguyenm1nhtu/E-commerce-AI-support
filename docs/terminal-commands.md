@@ -7,7 +7,7 @@ Chạy tại thư mục chứa `pom.xml`, bằng PowerShell với JDK 25.
 **Cách 1: dùng script tự nạp `.env.dev`**
 
 ```powershell
-.\dev.ps1
+.\scripts\dev.ps1
 ```
 
 Chuẩn bị lần đầu: sao chép `.env.example` thành `.env.dev` nếu chưa có, rồi điền
@@ -28,7 +28,7 @@ biến môi trường hiện có; biến không có trong file giữ giá trị 
 trả về mã thoát của Maven.
 
 Ctrl+C chỉ dừng backend; PostgreSQL và Redis tiếp tục chạy nền. Có thể chạy lại
-`.\dev.ps1` khi container vẫn đang chạy; Compose dùng lại container nếu cấu hình
+`.\scripts\dev.ps1` khi container vẫn đang chạy; Compose dùng lại container nếu cấu hình
 không đổi. Script không tự gọi `down`, kể cả khi backend lỗi. Để dừng Docker dev:
 
 ```powershell
@@ -45,7 +45,7 @@ Dùng nháy đơn quanh mật khẩu chứa `$` hoặc `#`, như mẫu cấu hì
 Nếu PowerShell chặn thực thi script, dùng:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 ```
 
 **Cách 2: chạy Maven trực tiếp**
@@ -59,7 +59,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1
 
 Backend dev chạy tại `http://localhost:8080`.
 
-Backend yêu cầu `JWT_SECRET`: Base64 của ít nhất 32 byte ngẫu nhiên. `dev.ps1`
+Backend yêu cầu `JWT_SECRET`: Base64 của ít nhất 32 byte ngẫu nhiên. `scripts/dev.ps1`
 nạp giá trị từ `.env.dev`; chạy Maven trực tiếp phải tự đặt biến môi trường.
 Tạo secret mới trong môi trường PowerShell hiện tại mà không in giá trị:
 
@@ -157,7 +157,7 @@ có TTL và đọc lại dữ liệu sau eviction/hết hạn. Không truyền c
 đăng nhập, refresh, logout, TTL phiên, replay và request đồng thời bằng Redis thật.
 Các test này cũng được bật bởi `redis.integration.port`; không dùng dữ liệu dev/prod.
 `REDIS_NAMESPACE` và `REDIS_CACHE_TTL` có thể đặt trong `.env.dev` khi chạy
-`dev.ps1`; mặc định lần lượt là `ai-commerce-support` và `10m`.
+`scripts/dev.ps1`; mặc định lần lượt là `ai-commerce-support` và `10m`.
 
 Kiểm tra riêng script dev (dùng Docker và Maven giả lập, không cần database):
 
@@ -186,7 +186,7 @@ Dev/prod cần database và Redis đang chạy, truy cập được từ backend
 môi trường tương ứng. Dev cần `POSTGRES_PASSWORD`; prod cần `POSTGRES_DB`,
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`.
 Lệnh Maven trực tiếp chỉ chọn Spring profile, không tự nạp `.env.dev`/`.env.prod`;
-script `dev.ps1` nạp `.env.dev` cho backend dev.
+script `scripts/dev.ps1` nạp `.env.dev` cho backend dev.
 Xem [cấu hình Docker Compose](docker-compose.md) về địa chỉ kết nối từng môi trường.
 
 Liquibase chạy changelog tại `src/main/resources/db/changelog/` khi backend khởi động.
