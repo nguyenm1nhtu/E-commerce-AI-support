@@ -174,7 +174,7 @@ schema đầy đủ.
 
 Ghi chú triển khai bổ sung (không phải ràng buộc trong PDF): `Shipment.carrier`
 dùng enum `Carrier` gồm `GHTK`, `GHN`, `VIETTEL_POST` (Viettel Post).
-Xem [commerce model](commerce-model.md) để biết mapping và ràng buộc database.
+Xem [commerce guide](commerce-guide.md) để biết mapping và ràng buộc database.
 
 Ghi chú triển khai bổ sung cho User và xác thực (theo yêu cầu ngày 2026-10-03,
 không phải ràng buộc trong PDF):
