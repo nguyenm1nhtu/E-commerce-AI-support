@@ -207,15 +207,27 @@ Cần PostgreSQL dev đang chạy và đã đặt `POSTGRES_HOST`, `POSTGRES_POR
    .\mvnw.cmd compile liquibase:diff
    ```
 
-2. Sinh file changeset đề xuất từ chênh lệch đó:
+2. Sinh SQL, tự đánh số, lưu đúng thư mục và thêm include vào master:
 
    ```powershell
-   .\mvnw.cmd compile liquibase:diff "-Dliquibase.diffChangeLogFile=target/entity-diff.yaml"
+   .\scripts\New-Migration.ps1 create-example-table
    ```
 
-   Kiểm tra file trong `target/`, chỉnh lại rồi thêm changeset phù hợp vào
-   `src/main/resources/db/changelog/changes/` rồi include từ master changelog.
-   Nếu entity và database đã khớp, lệnh có thể báo không có thay đổi và không tạo file.
+   Tên mô tả dùng chữ thường, số và dấu gạch ngang. Nếu số lớn nhất hiện tại là
+   `008`, script tạo `src/main/resources/db/changelog/changes/009-create-example-table.sql`
+   và tự thêm include tương đối vào `db.changelog-master.yaml`. Script không chạy
+   `update`. Kiểm tra SQL trước khi áp dụng. Khi không có changeset, Maven lỗi hoặc
+   SQL không đúng định dạng, script không thêm file migration hay include mới.
+
+   Đây là quy trình mặc định khi thêm/sửa/xóa cấu trúc qua entity: sinh SQL bằng
+   Liquibase Hibernate trước, sau đó review và chỉnh phần cần thiết. Script dùng
+   file tạm riêng mỗi lần để tránh nối vào migration cũ. Database dùng
+   so sánh cần ở đúng trạng thái các migration hiện có; diff quét toàn bộ package
+   entity nên có thể chứa nhiều thay đổi chưa áp dụng, không chỉ entity vừa viết.
+   Lệnh này sinh file, chưa áp dụng thay đổi vào database. Kiểm tra kỹ rename vì
+   công cụ có thể đề xuất drop/create. Chỉ bổ sung SQL thủ công cho phần công cụ
+   không sinh đúng hoặc không hỗ trợ và ghi rõ lý do. Hibernate/JPA vẫn xử lý
+   SELECT/INSERT/UPDATE/DELETE dữ liệu khi ứng dụng chạy; giữ `ddl-auto: validate`.
 
 3. Đánh dấu trạng thái hiện tại trước khi áp dụng migration mới:
 
@@ -226,8 +238,9 @@ Cần PostgreSQL dev đang chạy và đã đặt `POSTGRES_HOST`, `POSTGRES_POR
 4. Xem trước SQL, rồi áp dụng migration:
 
    ```powershell
-   .\mvnw.cmd liquibase:updateSQL
+   .\mvnw.cmd compile liquibase:updateSQL
    .\mvnw.cmd liquibase:update
+   .\mvnw.cmd test
    ```
 
 5. Xem lịch sử để chọn mốc rollback:

@@ -50,6 +50,23 @@ Liquibase owns schema changes. Add immutable changesets under
 `ddl-auto: validate`; entity changes require matching migrations. Tests use the
 `test` profile and H2.
 
+For entity-driven schema changes, generate SQL migrations with the configured
+Liquibase Hibernate integration instead of writing the initial DDL manually:
+`./scripts/New-Migration.ps1 <change-name-in-kebab-case>`.
+The script selects the next numeric prefix, generates SQL through Maven, saves
+it under `src/main/resources/db/changelog/changes/`, and adds the master include
+only when generation succeeds with changesets. Use a development database at
+the existing migration baseline. Review the generated diff, keep only the
+intended schema changes, then run `./mvnw.cmd compile liquibase:updateSQL`,
+`./mvnw.cmd liquibase:update`, and `./mvnw.cmd test`.
+Do not manually number files or append master includes for generated migrations.
+Do not automatically apply generated drops or
+interpret a rename as drop-and-create. Hand-edit only to correct generated SQL
+or cover changes the generator cannot represent, and explain those adjustments.
+If generation is blocked, report the blocker rather than silently writing the
+migration manually. Keep runtime data operations in Hibernate/JPA and retain
+`ddl-auto: validate`.
+
 ## Coding Style & Naming Conventions
 
 Use four-space indentation for Java and retain the existing package
